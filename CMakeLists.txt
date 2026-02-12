@@ -21,11 +21,32 @@ list(APPEND CMAKE_PROGRAM_PATH "C:/Users/evgen/vcpkg/installed/x64-mingw-static/
 find_package(Drogon CONFIG REQUIRED PATHS "C:/Users/evgen/vcpkg/installed/x64-mingw-static/share/drogon")
 find_package(jsoncpp CONFIG REQUIRED PATHS "C:/Users/evgen/vcpkg/installed/x64-mingw-static/share/jsoncpp")
 
-add_executable(SPO_1 main.cpp)
+# ============ ЛОКАЛЬНАЯ SQLITE ============
+add_library(SQLite3_local STATIC 
+    libs/Sql/sqlite3.c
+)
+
+target_include_directories(SQLite3_local PUBLIC 
+    libs/Sql
+)
+
+# ============ ИСПОЛНЯЕМЫЙ ФАЙЛ ============
+add_executable(SPO_1 
+    main.cpp
+    DataBase.cpp
+    DataBase.h
+    handler.cpp
+    handler.h
+)
+
+target_include_directories(SPO_1 PRIVATE
+    libs/Sql
+)
 
 target_link_libraries(SPO_1 
     Drogon::Drogon
     JsonCpp::JsonCpp
+    SQLite3_local
 )
 
 # Статическая компиляция
