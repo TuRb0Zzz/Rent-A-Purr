@@ -10,6 +10,11 @@
         CloseDataBase();
     }
 
+    bool DataBase::CreateTables(){
+        return Sql_exec("");/////////////////
+    }
+
+
     bool DataBase::OpenDataBase(){
         int answer_from_db = sqlite3_open("CatsDataBase",&db);
         if(answer_from_db!=SQLITE_OK){
@@ -38,7 +43,7 @@
         return true;
     }
 
-    void DataBase::Sql_request(const string& sql_string,function<void(vector<string>)>callback){
+    void DataBase::Sql_request_callback(const string& sql_string,function<void(vector<string>)>callback){
         sqlite3_stmt* stmt;    
         sqlite3_prepare_v2(db, sql_string.c_str(), -1, &stmt, nullptr);      
         while (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -50,4 +55,23 @@
             }         
             callback(row);
         }
+        sqlite3_finalize(stmt);
     }
+
+    vector<vector<string>> DataBase::Sql_request_vector(const string& sql_string){
+        vector<vector<string>> result;
+        sqlite3_stmt* stmt;    
+        sqlite3_prepare_v2(db, sql_string.c_str(), -1, &stmt, nullptr);      
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            std::vector<std::string> row;         
+            int cols = sqlite3_column_count(stmt);         
+            for (int i = 0; i < cols; i++) {
+                const char* val = (const char*)sqlite3_column_text(stmt, i);
+                row.push_back(val ? val : "NULL");
+            }
+            result.push_back(row);         
+        }
+        sqlite3_finalize(stmt);
+        return result;
+    }
+
