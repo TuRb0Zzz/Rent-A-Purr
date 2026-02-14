@@ -1,4 +1,5 @@
-#include "Database.h"
+#include "DataBase.h"
+#include <future>
 #include <iostream>
 
 
@@ -14,7 +15,8 @@
 
     bool DataBase::CreateTables(){
         Sql_exec("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, access_level INTEGER DEFAULT 0 CHECK(access_level IN (0, 1)));");
-        return true;
+        Sql_exec("CREATE TABLE IF NOT EXISTS sessions (session_id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires_at DATETIME NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id));");
+        return true;//bruh
     }
 
 

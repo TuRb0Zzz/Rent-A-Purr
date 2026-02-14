@@ -35,8 +35,8 @@ add_executable(SPO_1
     main.cpp
     DataBase.cpp
     DataBase.h
-    handler.cpp
-    handler.h
+    Handler.cpp
+    Handler.h
 )
 
 target_include_directories(SPO_1 PRIVATE
