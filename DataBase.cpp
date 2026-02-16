@@ -16,9 +16,10 @@
     bool DataBase::CreateTables(){
         Sql_exec("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, access_level INTEGER DEFAULT 0 CHECK(access_level IN (0, 1)));");
         Sql_exec("CREATE TABLE IF NOT EXISTS sessions (session_id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires_at DATETIME NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id));");
+        Sql_exec("CREATE TABLE IF NOT EXISTS cats (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT, photo_filename TEXT);");
+        Sql_exec("CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, cat_id INTEGER NOT NULL, user_id INTEGER NOT NULL, start_time DATETIME NOT NULL, end_time DATETIME NOT NULL, FOREIGN KEY (cat_id) REFERENCES cats(id), FOREIGN KEY (user_id) REFERENCES users(id)); CREATE INDEX IF NOT EXISTS idx_bookings_cat_time ON bookings(cat_id, start_time, end_time);");
         return true;//bruh
     }
-
 
     bool DataBase::OpenDataBase(){
         int answer_from_db = sqlite3_open("../DataBase/CatsDataBase.db",&db);
@@ -36,6 +37,14 @@
             return true;
         }
         return false;
+    }
+
+    void DataBase::cleanExpiredSessions() {
+        Sql_exec("DELETE FROM sessions WHERE expires_at <= datetime('now')");
+    }
+
+    long long DataBase::GetLastInsertId() {
+        return sqlite3_last_insert_rowid(db);
     }
 
     bool DataBase::Sql_exec(const string& sql_string){

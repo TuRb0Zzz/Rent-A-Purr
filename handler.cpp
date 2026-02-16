@@ -22,6 +22,56 @@ string Handler::hashPassword(const string& password) {
             return ss.str();
 }
 
+int Handler::checkAuth(string session_id) {
+    if (session_id.empty()) {
+        return -1;
+    }
+    int userId = getUserIdFromSession(session_id);
+    return userId;
+}
+
+
+string Handler::generateSessionId() {
+        static int counter = 0;
+        string data = to_string(time(nullptr)) + to_string(rand()) + to_string(counter++);
+        
+        unsigned char hash[SHA256_DIGEST_LENGTH];
+        SHA256((unsigned char*)data.c_str(), data.length(), hash);
+        
+        stringstream ss;
+        for(int i = 0; i < 16; i++) {
+            ss << hex << setw(2) << setfill('0') << (int)hash[i];
+        }
+        return ss.str();
+}
+
+string Handler::createSession(long long id){
+
+    string sessionId = generateSessionId();
+    char* sql = sqlite3_mprintf("INSERT INTO sessions (session_id, user_id, expires_at) VALUES (%Q, %d, datetime('now', '+1 day'))",sessionId.c_str(), id);
+    if (db.Sql_exec(sql)) {
+            sqlite3_free(sql);
+            return sessionId;
+    }
+    sqlite3_free(sql);
+    return "";
+}
+
+
+int Handler::getUserIdFromSession(const string& sessionId) {
+        db.cleanExpiredSessions();
+        
+        char* sql = sqlite3_mprintf("SELECT user_id FROM sessions WHERE session_id = %Q",sessionId.c_str());
+        
+        vector<vector<string>> result = db.Sql_request_vector(sql);
+        sqlite3_free(sql);
+        
+        if (!result.empty()) {
+            return stoi(result[0][0]);
+        }
+        return -1;
+}
+
 void Handler::RegisterUser(const HttpRequestPtr& request,function<void(const HttpResponsePtr&)>&& callback){
     auto json = request->getJsonObject();
     if(!json){
@@ -61,10 +111,16 @@ void Handler::RegisterUser(const HttpRequestPtr& request,function<void(const Htt
     }
     sqlite3_free(sql);
 
+    long long id = db.GetLastInsertId();
+    string session_id = createSession(id);
+
     Json::Value resp;
     resp["status"]="ok";
     resp["message"] = "User created";
     auto response = HttpResponse::newHttpJsonResponse(resp);
+    if(session_id!=""){
+        response->addHeader("Set-Cookie","session_id=" + session_id + "; Max-Age=86400; Path=/; HttpOnly");
+    } 
     response->setStatusCode(k201Created);
     callback(response);
 }

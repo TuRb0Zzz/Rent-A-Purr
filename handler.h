@@ -16,9 +16,19 @@ class Handler{
 
         static bool verifyPassword(const string& plainPassword, const string& hashedPassword);
 
+        static string createSession(long long id);
+
+        static string generateSessionId();
+
+        int getUserIdFromSession(const string& sessionId);
+
+        int checkAuth(string session_id);
+
     public:
+
+
 
         static void RegisterUser(const HttpRequestPtr& request,std::function<void(const HttpResponsePtr&)>&& callback);
         
-        //void AutoriseUser(const HttpRequestPtr& req,function<void(const HttpResponsePtr&)> callback);
+        //static void AutoriseUser(const HttpRequestPtr& req,function<void(const HttpResponsePtr&)> callback);
 };
