@@ -18,7 +18,7 @@ int main() {
 
     app().registerHandler("/cats", &Handler::GetCats, {Get});
 
-    cout<<"server is runnung"<<endl;
+    cout<<"server is running"<<endl;
     app().addListener("0.0.0.0", 8000).run();
 
     return 0;

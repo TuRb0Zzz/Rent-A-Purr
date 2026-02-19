@@ -80,6 +80,7 @@ int Handler::getUserIdFromSession(const string& sessionId) {
 }
 
 void Handler::RegisterUser(const HttpRequestPtr& request,function<void(const HttpResponsePtr&)>&& callback){
+    cout<<"POST /register"<<endl;
     auto json = request->getJsonObject();
     if(!json){
         Json::Value bad_answer;
@@ -136,6 +137,7 @@ void Handler::RegisterUser(const HttpRequestPtr& request,function<void(const Htt
 }
 
 void Handler::AutoriseUser(const HttpRequestPtr& request,function<void(const HttpResponsePtr&)>&& callback){
+    cout<<"GET /login"<<endl;
     auto json = request->getJsonObject();
     if(!json){
         Json::Value bad_answer;
@@ -188,6 +190,7 @@ void Handler::AutoriseUser(const HttpRequestPtr& request,function<void(const Htt
 }
 
 void Handler::GetCats(const HttpRequestPtr& req,function<void(const HttpResponsePtr&)>&& callback){
+    cerr<<"GET /cats"<<endl;
     Json::Value resp;
     Json::Value cats(Json::arrayValue);
     char* sql = sqlite3_mprintf("SELECT * FROM cats");
