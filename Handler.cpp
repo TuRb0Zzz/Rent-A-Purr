@@ -125,6 +125,8 @@ void Handler::RegisterUser(const HttpRequestPtr& request,function<void(const Htt
     Json::Value resp;
     resp["status"]="ok";
     resp["message"] = "User created";
+    resp["nickname"] = nickname;
+
     auto response = HttpResponse::newHttpJsonResponse(resp);
     if(session_id!=""){
         response->addHeader("Set-Cookie","session_id=" + session_id + "; Max-Age=86400; Path=/; HttpOnly");
@@ -184,3 +186,20 @@ void Handler::AutoriseUser(const HttpRequestPtr& request,function<void(const Htt
     response->setStatusCode(k200OK);
     callback(response);
 }
+
+void Handler::GetCats(const HttpRequestPtr& req,function<void(const HttpResponsePtr&)>&& callback){
+    Json::Value resp(Json::arrayValue);
+    Json::Value buffer_cat;
+    char* sql = sqlite3_mprintf("SELECT * FROM cats");
+    db.Sql_request_callback(sql,[&resp, &buffer_cat](vector<string> output){
+        buffer_cat["name"]=output[1];
+        buffer_cat["description"]=output[2];
+        buffer_cat["filename"]=output[3];
+        resp.append(buffer_cat);
+    });
+    sqlite3_free(sql);
+    auto response = HttpResponse::newHttpJsonResponse(resp);
+    response->setStatusCode(k200OK);
+    callback(response);
+}
+
