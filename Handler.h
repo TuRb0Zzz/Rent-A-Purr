@@ -20,15 +20,23 @@ class Handler{
 
         static string generateSessionId();
 
-        int getUserIdFromSession(const string& sessionId);
+        static int getUserIdFromSession(const string& sessionId);
 
-        int checkAuth(string session_id);
+        static int checkAuth(string session_id);
+
+        static bool CheckPermissions(int user_id);
+
+        static string GenerateFileName(string extension);
 
     public:
 
-        static void RegisterUser(const HttpRequestPtr& request,std::function<void(const HttpResponsePtr&)>&& callback);
+        static void RegisterUser(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback);
         
-        static void AutoriseUser(const HttpRequestPtr& req,function<void(const HttpResponsePtr&)>&& callback);
+        static void AutoriseUser(const HttpRequestPtr& req, function<void(const HttpResponsePtr&)>&& callback);
 
-        static void GetCats(const HttpRequestPtr& req,function<void(const HttpResponsePtr&)>&& callback);
+        static void GetCats(const HttpRequestPtr& req, function<void(const HttpResponsePtr&)>&& callback);
+
+        static void handleOptions(const HttpRequestPtr& req, function<void(const HttpResponsePtr&)>&& callback);
+
+        static void uploadCatPhoto(const HttpRequestPtr& req, function<void(const HttpResponsePtr&)>&& callback);
 };
