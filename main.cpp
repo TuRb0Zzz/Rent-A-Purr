@@ -13,7 +13,7 @@ DataBase db;
 
 int main() {
 
-    app().setDocumentRoot("./images");
+    app().setDocumentRoot("../images");
     app().setStaticFileHeaders({{"Cache-Control", "public, max-age=86400"}});
 
 

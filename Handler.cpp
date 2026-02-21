@@ -240,7 +240,7 @@ void Handler::handleOptions(const HttpRequestPtr& request, function<void(const H
 }
 
 void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback) {
-    
+    cout<<"POST /cats"<<endl;
     string sessionId = request->getCookie("session_id");
     int user_id = checkAuth(sessionId);
     if (user_id == -1) {
@@ -304,7 +304,7 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
 
     string newFilename = GenerateFileName(ext);
     
-    string savePath = "./images/" + newFilename;
+    string savePath = "../images/" + newFilename;
     if (!file.saveAs(savePath)) {
         Json::Value bad_answer;
         bad_answer["status"]="bad";
