@@ -1,0 +1,4 @@
+/home/baabbabai/GitHub/bebebasbababoy/build/CMakeFiles/SQLite3_local.dir
+/home/baabbabai/GitHub/bebebasbababoy/build/CMakeFiles/SPO_1.dir
+/home/baabbabai/GitHub/bebebasbababoy/build/CMakeFiles/edit_cache.dir
+/home/baabbabai/GitHub/bebebasbababoy/build/CMakeFiles/rebuild_cache.dir

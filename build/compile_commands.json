@@ -1,0 +1,26 @@
+[
+{
+  "directory": "/home/baabbabai/GitHub/bebebasbababoy/build",
+  "command": "/usr/bin/gcc  -I/home/baabbabai/GitHub/bebebasbababoy/libs/Sql -g -o CMakeFiles/SQLite3_local.dir/libs/Sql/sqlite3.c.o -c /home/baabbabai/GitHub/bebebasbababoy/libs/Sql/sqlite3.c",
+  "file": "/home/baabbabai/GitHub/bebebasbababoy/libs/Sql/sqlite3.c",
+  "output": "CMakeFiles/SQLite3_local.dir/libs/Sql/sqlite3.c.o"
+},
+{
+  "directory": "/home/baabbabai/GitHub/bebebasbababoy/build",
+  "command": "/usr/bin/g++  -I/home/baabbabai/GitHub/bebebasbababoy/libs/Sql -isystem /usr/include/jsoncpp -g -std=gnu++17 -o CMakeFiles/SPO_1.dir/main.cpp.o -c /home/baabbabai/GitHub/bebebasbababoy/main.cpp",
+  "file": "/home/baabbabai/GitHub/bebebasbababoy/main.cpp",
+  "output": "CMakeFiles/SPO_1.dir/main.cpp.o"
+},
+{
+  "directory": "/home/baabbabai/GitHub/bebebasbababoy/build",
+  "command": "/usr/bin/g++  -I/home/baabbabai/GitHub/bebebasbababoy/libs/Sql -isystem /usr/include/jsoncpp -g -std=gnu++17 -o CMakeFiles/SPO_1.dir/DataBase.cpp.o -c /home/baabbabai/GitHub/bebebasbababoy/DataBase.cpp",
+  "file": "/home/baabbabai/GitHub/bebebasbababoy/DataBase.cpp",
+  "output": "CMakeFiles/SPO_1.dir/DataBase.cpp.o"
+},
+{
+  "directory": "/home/baabbabai/GitHub/bebebasbababoy/build",
+  "command": "/usr/bin/g++  -I/home/baabbabai/GitHub/bebebasbababoy/libs/Sql -isystem /usr/include/jsoncpp -g -std=gnu++17 -o CMakeFiles/SPO_1.dir/Handler.cpp.o -c /home/baabbabai/GitHub/bebebasbababoy/Handler.cpp",
+  "file": "/home/baabbabai/GitHub/bebebasbababoy/Handler.cpp",
+  "output": "CMakeFiles/SPO_1.dir/Handler.cpp.o"
+}
+]
