@@ -208,17 +208,46 @@ void Handler::AutoriseUser(const HttpRequestPtr& request,function<void(const Htt
 }
 
 void Handler::GetCats(const HttpRequestPtr& request,function<void(const HttpResponsePtr&)>&& callback){
-    cerr<<"GET /cats"<<endl;
+    cout<<"GET /cats"<<endl;
     Json::Value resp;
     Json::Value cats(Json::arrayValue);
-    char* sql = sqlite3_mprintf("SELECT * FROM cats");
+
+    char* sql = sqlite3_mprintf(
+        "SELECT cats.*, "
+        "GROUP_CONCAT(tags.name) as tags "
+        "FROM cats "
+        "LEFT JOIN cat_tags ON cats.id = cat_tags.cat_id "
+        "LEFT JOIN tags ON cat_tags.tag_id = tags.id "
+        "GROUP BY cats.id"
+    );
+
     db.Sql_request_callback(sql,[&cats](vector<string> output){
         Json::Value buffer_cat;
+
+        buffer_cat["id"]=stoi(output[0]);
         buffer_cat["name"]=output[1];
         buffer_cat["description"]=output[2];
-        buffer_cat["filename"]=output[3];
+        buffer_cat["breed"]=output[3];
+        buffer_cat["age"]=output[4];
+        buffer_cat["filename"]=output[5];
+        
+        Json::Value tags(Json::arrayValue);
+
+        if (!output[6].empty()) {
+            string tags_string = output[6];
+            size_t pos = 0;
+            string tag;
+            while ((pos = tags_string.find(',')) != string::npos) {
+                tag = tags_string.substr(0, pos);
+                tags.append(tag);
+                tags_string.erase(0, pos + 1);
+            }
+            tags.append(tags_string);
+        }
+        buffer_cat["tags"] = tags;
         cats.append(buffer_cat);
     });
+    
     sqlite3_free(sql);
     resp["status"]="ok";
     resp["cats"]=cats;
@@ -286,10 +315,10 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
     auto& file = parser.getFiles()[0];
     auto& params = parser.getParameters();
     
-    if (params.find("name") == params.end() || params.find("description") == params.end()){
+    if (params.find("name") == params.end() || params.find("description") == params.end() || params.find("breed") == params.end() || params.find("age") == params.end() /*|| params.find("tags") == params.end()*/){
         Json::Value bad_answer;
         bad_answer["status"]="bad";
-        bad_answer["message"]="No name or description field";
+        bad_answer["message"]="Not enough parameters";
         auto response = HttpResponse::newHttpJsonResponse(bad_answer);
         response->setStatusCode(k400BadRequest);
         callback(response);
@@ -298,6 +327,8 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
 
     string cat_name = params.at("name");
     string cat_description = params.at("description");
+    string cat_breed = params.at("breed");
+    string cat_age = params.at("age");
 
     string originalName = file.getFileName();
     string ext = originalName.substr(originalName.find_last_of("."));
@@ -315,13 +346,21 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
         return;
     }
     
-    char* sql = sqlite3_mprintf("INSERT INTO cats (name, description, photo_filename) VALUES (%Q, %Q, %Q)",cat_name.c_str(),cat_description.c_str(),newFilename.c_str());
+    char* sql = sqlite3_mprintf("INSERT INTO cats (name, description, breed, age, photo_filename) VALUES (%Q, %Q, %Q, %Q, %Q)",cat_name.c_str(),cat_description.c_str(),cat_breed.c_str(),cat_age.c_str(),newFilename.c_str());
     db.Sql_exec(sql);
     sqlite3_free(sql);
     
+    //complete tags!!
+
+
     Json::Value resp;
     resp["status"] = "ok";
+    resp["name"]=cat_name;
+    resp["description"]=cat_description;
+    resp["breed"]=cat_breed;
+    resp["age"]=cat_age;
     resp["filename"] = newFilename;
+    //resp["tags"] = ; to complete with tags
     
     auto response = HttpResponse::newHttpJsonResponse(resp);
     response->setStatusCode(k201Created);
