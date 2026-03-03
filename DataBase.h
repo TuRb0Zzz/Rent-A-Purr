@@ -14,6 +14,8 @@ public:
 
     ~DataBase();
 
+    sqlite3* GetDataBaseLink();
+
     bool CreateTables();
 
     bool OpenDataBase();

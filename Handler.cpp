@@ -207,8 +207,8 @@ void Handler::AutoriseUser(const HttpRequestPtr& request,function<void(const Htt
     callback(response);
 }
 
-void Handler::GetCats(const HttpRequestPtr& request,function<void(const HttpResponsePtr&)>&& callback){
-    cout<<"GET /cats"<<endl;
+void Handler::GetCats(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback) {
+    cout << "GET /cats" << endl;
     Json::Value resp;
     Json::Value cats(Json::arrayValue);
 
@@ -221,18 +221,17 @@ void Handler::GetCats(const HttpRequestPtr& request,function<void(const HttpResp
         "GROUP BY cats.id"
     );
 
-    db.Sql_request_callback(sql,[&cats](vector<string> output){
+    db.Sql_request_callback(sql, [&cats](vector<string> output) {
         Json::Value buffer_cat;
 
-        buffer_cat["id"]=stoi(output[0]);
-        buffer_cat["name"]=output[1];
-        buffer_cat["description"]=output[2];
-        buffer_cat["breed"]=output[3];
-        buffer_cat["age"]=output[4];
-        buffer_cat["filename"]=output[5];
+        buffer_cat["id"] = stoi(output[0]);
+        buffer_cat["name"] = output[1];
+        buffer_cat["description"] = output[2];
+        buffer_cat["breed"] = output[3];
+        buffer_cat["age"] = output[4];
+        buffer_cat["filename"] = output[5];
         
         Json::Value tags(Json::arrayValue);
-
         if (!output[6].empty()) {
             string tags_string = output[6];
             size_t pos = 0;
@@ -245,12 +244,45 @@ void Handler::GetCats(const HttpRequestPtr& request,function<void(const HttpResp
             tags.append(tags_string);
         }
         buffer_cat["tags"] = tags;
+        
+        Json::Value bookings(Json::arrayValue);
+        
+        
+        char* bookings_sql = sqlite3_mprintf("SELECT start_time, end_time FROM bookings WHERE cat_id = %d ORDER BY start_time",stoi(output[0]));
+        
+        db.Sql_request_callback(bookings_sql, [&bookings](vector<string> booking_output) {
+            Json::Value tek_booking(Json::arrayValue);
+            tek_booking.append(booking_output[0]);
+            tek_booking.append(booking_output[1]);
+            bookings.append(tek_booking);
+        });
+        
+        sqlite3_free(bookings_sql);
+        buffer_cat["bookings"] = bookings;
+
+        Json::Value medical(Json::arrayValue);
+
+        char* sql = sqlite3_mprintf("SELECT id, icon, label, color, bg FROM medical WHERE cat_id=%d",stoi(output[0]));
+
+        db.Sql_request_callback(sql, [&medical](vector<string> medical_string) {
+            Json::Value med;
+            med["id"]=stoi(medical_string[0]);
+            med["icon"]=medical_string[1];
+            med["label"]=medical_string[2];
+            med["color"]=medical_string[3];
+            med["bg"]=medical_string[4];
+            medical.append(med);
+        });
+        sqlite3_free(sql);
+        buffer_cat["medical"]=medical;
         cats.append(buffer_cat);
     });
-    
+
     sqlite3_free(sql);
-    resp["status"]="ok";
-    resp["cats"]=cats;
+    
+    resp["status"] = "ok";
+    resp["cats"] = cats;
+    
     auto response = HttpResponse::newHttpJsonResponse(resp);
     response->setStatusCode(k200OK);
     response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
@@ -315,7 +347,7 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
     auto& file = parser.getFiles()[0];
     auto& params = parser.getParameters();
     
-    if (params.find("name") == params.end() || params.find("description") == params.end() || params.find("breed") == params.end() || params.find("age") == params.end() /*|| params.find("tags") == params.end()*/){
+    if (params.find("name") == params.end() || params.find("description") == params.end() || params.find("breed") == params.end() || params.find("age") == params.end()){
         Json::Value bad_answer;
         bad_answer["status"]="bad";
         bad_answer["message"]="Not enough parameters";
@@ -329,6 +361,8 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
     string cat_description = params.at("description");
     string cat_breed = params.at("breed");
     string cat_age = params.at("age");
+    string cat_tags = params.find("tags") != params.end() ? params.at("tags") : "";
+    string cat_medical = params.find("medical") != params.end() ? params.at("medical") : "";
 
     string originalName = file.getFileName();
     string ext = originalName.substr(originalName.find_last_of("."));
@@ -350,8 +384,116 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
     db.Sql_exec(sql);
     sqlite3_free(sql);
     
-    //complete tags!!
+    int cat_id =sqlite3_last_insert_rowid(db.GetDataBaseLink());
+    Json::Value tagsArray(Json::arrayValue);
+    if(!cat_tags.empty()){
+        vector<string> tag_names;
+        size_t pos = 0;
+        string temp_tags = cat_tags;
+        while ((pos = temp_tags.find(',')) != string::npos) {
+            string tag = temp_tags.substr(0, pos);
 
+            tag.erase(0, tag.find_first_not_of(" \t"));
+            tag.erase(tag.find_last_not_of(" \t") + 1);
+
+            if (!tag.empty()) {
+                tag_names.push_back(tag);
+            }
+            temp_tags.erase(0, pos + 1);
+        }
+        string tag = temp_tags;
+        tag.erase(0, tag.find_first_not_of(" \t"));
+        tag.erase(tag.find_last_not_of(" \t") + 1);
+        if (!tag.empty()) {
+            tag_names.push_back(tag);
+        }
+
+        for (const string& tag_name : tag_names) {
+            tagsArray.append(tag_name);
+            
+            char* sql = sqlite3_mprintf("SELECT id FROM tags WHERE name = %Q",tag_name.c_str());
+            int tag_id = -1;
+            
+            db.Sql_request_callback(sql, [&tag_id](vector<string> output) {
+                if (!output.empty()) {
+                    tag_id = stoi(output[0]);
+                }
+            });
+            
+            sqlite3_free(sql);
+
+            if (tag_id == -1) {
+                char* sql = sqlite3_mprintf("INSERT INTO tags (name) VALUES (%Q)",tag_name.c_str());
+                db.Sql_exec(sql);
+                sqlite3_free(sql);
+                tag_id = sqlite3_last_insert_rowid(db.GetDataBaseLink());
+            }
+            if(tag_id!=-1){
+                char* sql = sqlite3_mprintf("INSERT OR IGNORE INTO cat_tags (cat_id, tag_id) VALUES (%d, %d)",cat_id, tag_id);
+                db.Sql_exec(sql);
+                sqlite3_free(sql);
+            }
+        }
+    }
+
+    Json::Value medArray(Json::arrayValue);
+    if(!cat_medical.empty()){
+        vector<string> medical_fields;
+        size_t pos = 0;
+        string temp_medical = cat_medical;
+
+        while ((pos = temp_medical.find(',')) != string::npos) {
+            string field = temp_medical.substr(0, pos);
+
+            field.erase(0, field.find_first_not_of(" \t"));
+            field.erase(field.find_last_not_of(" \t") + 1);
+            
+            medical_fields.push_back(field);
+            temp_medical.erase(0, pos + 1);
+        }
+        
+        if (!temp_medical.empty()) {
+            string last_field = temp_medical;
+            last_field.erase(0, last_field.find_first_not_of(" \t"));
+            last_field.erase(last_field.find_last_not_of(" \t") + 1);
+            medical_fields.push_back(last_field);
+        }
+        
+        if (medical_fields.size() % 4 != 0) {
+            Json::Value bad_answer;
+            bad_answer["status"] = "bad";
+            bad_answer["message"] = "Medical fields must be multiple of 4. Each record requires icon, label, color, bg";
+            bad_answer["received_fields"] = (int)medical_fields.size();
+            bad_answer["received_data"] = cat_medical;            
+            auto response = HttpResponse::newHttpJsonResponse(bad_answer);
+            response->setStatusCode(k400BadRequest);
+            response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+            callback(response);
+            return;
+        }
+        
+        
+        for (size_t i = 0; i + 3 < medical_fields.size(); i += 4) {
+            string icon = medical_fields[i];
+            string label = medical_fields[i + 1];
+            string color = medical_fields[i + 2];
+            string bg = medical_fields[i + 3];
+            
+            char* med_sql = sqlite3_mprintf("INSERT INTO medical (cat_id, icon, label, color, bg) VALUES (%d, %Q, %Q, %Q, %Q)",cat_id, icon.c_str(), label.c_str(), color.c_str(), bg.c_str());
+            
+            if (db.Sql_exec(med_sql)) {
+                Json::Value medRecord;
+                medRecord["id"] = sqlite3_last_insert_rowid(db.GetDataBaseLink());
+                medRecord["icon"] = icon;
+                medRecord["label"] = label;
+                medRecord["color"] = color;
+                medRecord["bg"] = bg;
+                medArray.append(medRecord);
+            }
+            
+            sqlite3_free(med_sql);
+        }
+    }
 
     Json::Value resp;
     resp["status"] = "ok";
@@ -360,7 +502,8 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
     resp["breed"]=cat_breed;
     resp["age"]=cat_age;
     resp["filename"] = newFilename;
-    //resp["tags"] = ; to complete with tags
+    resp["tags"] = tagsArray;
+    resp["medical"]=medArray;
     
     auto response = HttpResponse::newHttpJsonResponse(resp);
     response->setStatusCode(k201Created);
