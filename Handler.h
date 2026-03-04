@@ -43,4 +43,10 @@ class Handler{
         static void AddToBookings(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback);
 
         static void updateCatTagsAndMedical(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback);
+
+        static void GetAdminBookings(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback);
+
+        static void ConfirmAdminBookings(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback);
+
+        static void RejectAdminBooking(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback);
 };

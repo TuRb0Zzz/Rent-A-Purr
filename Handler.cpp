@@ -515,7 +515,7 @@ void Handler::updateCatTagsAndMedical(const HttpRequestPtr& request, function<vo
     string url = request->getPath();
     size_t poz = url.find_last_of('/');
     string id = url.substr(poz+1);
-    string cat_id="";
+    int cat_id=-1;
     try{
         cat_id = stoi(id);
     }catch(const std::exception& e){
@@ -525,6 +525,7 @@ void Handler::updateCatTagsAndMedical(const HttpRequestPtr& request, function<vo
         resp["error"] = "not a number";
         auto responce = HttpResponse::newHttpJsonResponse(resp);
         callback(responce);
+        return;
     }
     cout << "PUT /cats/" << cat_id << endl;
     string sessionId = request->getCookie("session_id");
@@ -769,7 +770,7 @@ void Handler::AddToBookings(const HttpRequestPtr& request, function<void(const H
         return;
     }
 
-    string cat_id = (*json)["id"].asString();
+    int cat_id = (*json)["id"].asInt();
     string start  = (*json)["start"].asString();
     string end = (*json)["end"].asString();
 
@@ -864,3 +865,276 @@ void Handler::AddToBookings(const HttpRequestPtr& request, function<void(const H
     response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
     callback(response);
 }
+
+void Handler::GetAdminBookings(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback) {
+    cout << "GET /bookings/admin" << endl;
+    
+    string sessionId = request->getCookie("session_id");
+    int user_id = checkAuth(sessionId);
+    
+    if (user_id == -1) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Unauthorized";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k401Unauthorized);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+    
+    if (!CheckPermissions(user_id)) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Access Denied";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k403Forbidden);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+    
+    Json::Value bookings(Json::arrayValue);
+    
+    char* sql = sqlite3_mprintf(
+        "SELECT b.id, b.cat_id, c.name as cat_name, b.user_id, u.nickname, "
+        "b.start_time, b.end_time "
+        "FROM bookings b "
+        "JOIN cats c ON b.cat_id = c.id "
+        "JOIN users u ON b.user_id = u.id "
+        "WHERE b.status = 0 "
+        "ORDER BY b.start_time"
+    );
+    
+    db.Sql_request_callback(sql, [&bookings](vector<string> output) {
+        Json::Value booking;
+        booking["id"] = stoi(output[0]);
+        booking["cat_id"] = stoi(output[1]);
+        booking["cat_name"] = output[2];
+        booking["user_id"] = stoi(output[3]);
+        booking["nickname"] = output[4];
+        booking["start_time"] = output[5];
+        booking["end_time"] = output[6];
+        bookings.append(booking);
+    });
+    
+    sqlite3_free(sql);
+    
+    Json::Value resp;
+    resp["status"] = "ok";
+    resp["bookings"] = bookings;
+    
+    auto response = HttpResponse::newHttpJsonResponse(resp);
+    response->setStatusCode(k200OK);
+    response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+    callback(response);
+}
+
+void Handler::ConfirmAdminBookings(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback){
+    cout << "PUT /admin/bookings/"<<endl;
+    string sessionId = request->getCookie("session_id");
+    int user_id = checkAuth(sessionId);
+    
+    if (user_id == -1) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Unauthorized";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k401Unauthorized);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+    
+    if (!CheckPermissions(user_id)) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Access Denied";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k403Forbidden);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+
+    auto json = request->getJsonObject();
+    if (!json) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Invalid JSON";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k400BadRequest);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+
+    if (!json->isMember("booking_id")) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Missing booking_id field";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k400BadRequest);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+
+    int booking_id = (*json)["booking_id"].asInt();
+
+    char* check_sql = sqlite3_mprintf("SELECT id, status FROM bookings WHERE id = %d", booking_id);
+    vector<vector<string>> check = db.Sql_request_vector(check_sql);
+    sqlite3_free(check_sql);
+
+    if (check.empty()) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Booking not found";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k404NotFound);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+
+    int current_status = stoi(check[0][1]);
+    if (current_status == 1) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Booking is already confirmed";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k400BadRequest);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+
+    char* update_sql = sqlite3_mprintf("UPDATE bookings SET status = 1 WHERE id = %d", booking_id);
+    bool success = db.Sql_exec(update_sql);
+    sqlite3_free(update_sql);
+
+
+    if (!success) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Failed to confirm booking";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k500InternalServerError);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+
+    Json::Value resp;
+    resp["status"] = "ok";
+    resp["message"] = "Booking confirmed successfully";
+    auto response = HttpResponse::newHttpJsonResponse(resp);
+    response->setStatusCode(k200OK);
+    response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+    callback(response);
+}
+
+void Handler::RejectAdminBooking(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback){
+    cout << "DELETE /admin/bookings" << endl;
+    
+    string sessionId = request->getCookie("session_id");
+    int user_id = checkAuth(sessionId);
+    
+    if (user_id == -1) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Unauthorized";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k401Unauthorized);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+    
+    if (!CheckPermissions(user_id)) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Access Denied";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k403Forbidden);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+
+    auto json = request->getJsonObject();
+    if (!json) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Invalid JSON";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k400BadRequest);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+
+    if (!json->isMember("booking_id")) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Missing booking_id field";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k400BadRequest);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+
+    int booking_id = (*json)["booking_id"].asInt();
+
+    char* check_sql = sqlite3_mprintf("SELECT id, status FROM bookings WHERE id = %d", booking_id);
+    vector<vector<string>> check = db.Sql_request_vector(check_sql);
+    sqlite3_free(check_sql);
+
+    if (check.empty()) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Booking not found";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k404NotFound);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+
+    int current_status = stoi(check[0][1]);
+    if (current_status == 1) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Cannot delete confirmed booking. Use cancel instead.";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k400BadRequest);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+
+    char* delete_sql = sqlite3_mprintf("DELETE FROM bookings WHERE id = %d", booking_id);
+    bool success = db.Sql_exec(delete_sql);
+    sqlite3_free(delete_sql);
+
+    if (!success) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Failed to delete booking";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k500InternalServerError);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+
+    Json::Value resp;
+    resp["status"] = "ok";
+    resp["message"] = "Booking rejected and deleted successfully";
+    auto response = HttpResponse::newHttpJsonResponse(resp);
+    response->setStatusCode(k200OK);
+    response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+    callback(response);
+}
+
