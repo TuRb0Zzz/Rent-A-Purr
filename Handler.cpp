@@ -248,7 +248,7 @@ void Handler::GetCats(const HttpRequestPtr& request, function<void(const HttpRes
         Json::Value bookings(Json::arrayValue);
         
         
-        char* bookings_sql = sqlite3_mprintf("SELECT start_time, end_time FROM bookings WHERE cat_id = %d ORDER BY start_time",stoi(output[0]));
+        char* bookings_sql = sqlite3_mprintf("SELECT start_time, end_time FROM bookings WHERE cat_id = %d AND status = 1 ORDER BY start_time",stoi(output[0]));
         
         db.Sql_request_callback(bookings_sql, [&bookings](vector<string> booking_output) {
             Json::Value tek_booking(Json::arrayValue);
@@ -504,6 +504,360 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
     resp["filename"] = newFilename;
     resp["tags"] = tagsArray;
     resp["medical"]=medArray;
+    
+    auto response = HttpResponse::newHttpJsonResponse(resp);
+    response->setStatusCode(k201Created);
+    response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+    callback(response);
+}
+
+void Handler::updateCatTagsAndMedical(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback) {
+    string url = request->getPath();
+    size_t poz = url.find_last_of('/');
+    string id = url.substr(poz+1);
+    string cat_id="";
+    try{
+        cat_id = stoi(id);
+    }catch(const std::exception& e){
+        Json::Value resp;
+        resp["id"] = id;
+        resp["path"] = url;
+        resp["error"] = "not a number";
+        auto responce = HttpResponse::newHttpJsonResponse(resp);
+        callback(responce);
+    }
+    cout << "PUT /cats/" << cat_id << endl;
+    string sessionId = request->getCookie("session_id");
+    int user_id = checkAuth(sessionId);
+    
+    if (user_id == -1) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Unauthorized";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k401Unauthorized);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+    
+    if (!CheckPermissions(user_id)) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Access Denied";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k403Forbidden);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+    
+    char* check_sql = sqlite3_mprintf("SELECT id FROM cats WHERE id = %d", cat_id);
+    vector<vector<string>> check_result = db.Sql_request_vector(check_sql);
+    sqlite3_free(check_sql);
+    
+    if (check_result.empty()) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Cat not found";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k404NotFound);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+    
+    auto json = request->getJsonObject();
+    if (!json) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Invalid JSON";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k400BadRequest);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+    
+    Json::Value response_data;
+    response_data["status"] = "ok";
+    response_data["cat_id"] = cat_id;
+    
+    if (json->isMember("tags")) {
+        string tags_string = (*json)["tags"].asString();
+        
+        char* delete_tags_sql = sqlite3_mprintf("DELETE FROM cat_tags WHERE cat_id = %d", cat_id);
+        db.Sql_exec(delete_tags_sql);
+        sqlite3_free(delete_tags_sql);
+        
+        Json::Value tagsArray(Json::arrayValue);
+        
+        if (!tags_string.empty()) {
+            vector<string> tag_names;
+            size_t pos = 0;
+            string temp_tags = tags_string;
+            
+            while ((pos = temp_tags.find(',')) != string::npos) {
+                string tag = temp_tags.substr(0, pos);
+                tag.erase(0, tag.find_first_not_of(" \t"));
+                tag.erase(tag.find_last_not_of(" \t") + 1);
+                if (!tag.empty()) {
+                    tag_names.push_back(tag);
+                }
+                temp_tags.erase(0, pos + 1);
+            }
+            
+            if (!temp_tags.empty()) {
+                string last_tag = temp_tags;
+                last_tag.erase(0, last_tag.find_first_not_of(" \t"));
+                last_tag.erase(last_tag.find_last_not_of(" \t") + 1);
+                if (!last_tag.empty()) {
+                    tag_names.push_back(last_tag);
+                }
+            }
+            
+            for (const string& tag_name : tag_names) {
+                if (tag_name.empty()) continue;
+                
+                tagsArray.append(tag_name);
+                
+                char* select_sql = sqlite3_mprintf("SELECT id FROM tags WHERE name = %Q", tag_name.c_str());
+                vector<vector<string>> tag_result = db.Sql_request_vector(select_sql);
+                sqlite3_free(select_sql);
+                
+                int tag_id = -1;
+                
+                if (!tag_result.empty()) {
+                    tag_id = stoi(tag_result[0][0]);
+                } else {
+                    char* insert_sql = sqlite3_mprintf("INSERT INTO tags (name) VALUES (%Q)", tag_name.c_str());
+                    if (db.Sql_exec(insert_sql)) {
+                        tag_id = sqlite3_last_insert_rowid(db.GetDataBaseLink());
+                    }
+                    sqlite3_free(insert_sql);
+                }
+                
+                if (tag_id != -1) {
+                    char* link_sql = sqlite3_mprintf("INSERT INTO cat_tags (cat_id, tag_id) VALUES (%d, %d)",cat_id, tag_id);
+                    db.Sql_exec(link_sql);
+                    sqlite3_free(link_sql);
+                }
+            }
+        }
+        
+        response_data["tags"] = tagsArray;
+    }
+    
+    if (json->isMember("medical")) {
+        string medical_string = (*json)["medical"].asString();
+        
+        char* delete_medical_sql = sqlite3_mprintf("DELETE FROM medical WHERE cat_id = %d", cat_id);
+        db.Sql_exec(delete_medical_sql);
+        sqlite3_free(delete_medical_sql);
+        
+        Json::Value medArray(Json::arrayValue);
+        
+        if (!medical_string.empty()) {
+            vector<string> medical_fields;
+            size_t pos = 0;
+            string temp_medical = medical_string;
+            
+            while ((pos = temp_medical.find(',')) != string::npos) {
+                string field = temp_medical.substr(0, pos);
+                field.erase(0, field.find_first_not_of(" \t"));
+                field.erase(field.find_last_not_of(" \t") + 1);
+                medical_fields.push_back(field);
+                temp_medical.erase(0, pos + 1);
+            }
+            
+            if (!temp_medical.empty()) {
+                string last_field = temp_medical;
+                last_field.erase(0, last_field.find_first_not_of(" \t"));
+                last_field.erase(last_field.find_last_not_of(" \t") + 1);
+                medical_fields.push_back(last_field);
+            }
+
+            if (medical_fields.size() % 4 != 0) {
+                Json::Value error_resp;
+                error_resp["status"] = "bad";
+                error_resp["message"] = "Medical fields must be multiple of 4";
+                error_resp["received_fields"] = (int)medical_fields.size();
+                error_resp["received_data"] = medical_string;
+                
+                auto response = HttpResponse::newHttpJsonResponse(error_resp);
+                response->setStatusCode(k400BadRequest);
+                response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+                callback(response);
+                return;
+            }
+            
+            for (size_t i = 0; i + 3 < medical_fields.size(); i += 4) {
+                string icon = medical_fields[i];
+                string label = medical_fields[i + 1];
+                string color = medical_fields[i + 2];
+                string bg = medical_fields[i + 3];
+                
+                if (icon.empty() || label.empty() || color.empty() || bg.empty()) {
+                    Json::Value error_resp;
+                    error_resp["status"] = "bad";
+                    error_resp["message"] = "Medical fields cannot be empty";
+                    error_resp["record_index"] = (int)(i / 4);
+                    
+                    auto response = HttpResponse::newHttpJsonResponse(error_resp);
+                    response->setStatusCode(k400BadRequest);
+                    response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+                    callback(response);
+                    return;
+                }
+                
+                char* med_sql = sqlite3_mprintf(
+                    "INSERT INTO medical (cat_id, icon, label, color, bg) VALUES (%d, %Q, %Q, %Q, %Q)",
+                    cat_id, icon.c_str(), label.c_str(), color.c_str(), bg.c_str()
+                );
+                
+                if (db.Sql_exec(med_sql)) {
+                    Json::Value medRecord;
+                    medRecord["id"] = sqlite3_last_insert_rowid(db.GetDataBaseLink());
+                    medRecord["icon"] = icon;
+                    medRecord["label"] = label;
+                    medRecord["color"] = color;
+                    medRecord["bg"] = bg;
+                    medArray.append(medRecord);
+                }
+                
+                sqlite3_free(med_sql);
+            }
+        }
+        
+        response_data["medical"] = medArray;
+    }
+    
+    if (!json->isMember("tags") && !json->isMember("medical")) {
+        response_data["message"] = "No updates provided. Use 'tags' or 'medical' fields";
+    }
+    
+    auto response = HttpResponse::newHttpJsonResponse(response_data);
+    response->setStatusCode(k200OK);
+    response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+    callback(response);
+}
+
+void Handler::AddToBookings(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback){
+    cout<<"POST /bookings"<<endl;
+    string sessionId = request->getCookie("session_id");
+    int user_id = checkAuth(sessionId);
+    
+    auto json = request->getJsonObject();
+    if(!json){
+        Json::Value bad_answer;
+        bad_answer["status"]="bad";
+        bad_answer["message"]="Bad Json";
+        auto response = HttpResponse::newHttpJsonResponse(bad_answer);
+        response->setStatusCode(k400BadRequest);
+        callback(response);
+        return;
+    }
+
+    if (!json->isMember("start") || !json->isMember("end") || !json->isMember("id")) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Missing required fields: start or end or id";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k400BadRequest);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+
+    string cat_id = (*json)["id"].asString();
+    string start  = (*json)["start"].asString();
+    string end = (*json)["end"].asString();
+
+
+    if (user_id == -1) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Unauthorized";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k401Unauthorized);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+
+    char* check_cat_sql = sqlite3_mprintf("SELECT id FROM cats WHERE id = %d", cat_id);
+    vector<vector<string>> cat_check = db.Sql_request_vector(check_cat_sql);
+    sqlite3_free(check_cat_sql);
+    
+    if (cat_check.empty()) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Cat not found";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k404NotFound);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+
+    char* check_booking_sql = sqlite3_mprintf(
+        "SELECT id FROM bookings WHERE cat_id = %d AND "
+        "((start_time <= %Q AND end_time > %Q) OR "
+        "(start_time < %Q AND end_time >= %Q) OR "
+        "(start_time >= %Q AND end_time <= %Q))",
+        cat_id, 
+        start.c_str(), start.c_str(),
+        end.c_str(), end.c_str(),
+        start.c_str(), end.c_str()
+    );
+    
+    vector<vector<string>> booking_check = db.Sql_request_vector(check_booking_sql);
+    sqlite3_free(check_booking_sql);
+    
+    if (!booking_check.empty()) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Cat is already booked for this time period";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k409Conflict);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+
+    char* insert_sql = sqlite3_mprintf("INSERT INTO bookings (cat_id, user_id, start_time, end_time) VALUES (%d, %d, %Q, %Q)",cat_id, user_id, start.c_str(), end.c_str());
+    bool success = db.Sql_exec(insert_sql);
+    int booking_id = sqlite3_last_insert_rowid(db.GetDataBaseLink());
+    sqlite3_free(insert_sql);
+    
+    if (!success) {
+        Json::Value resp;
+        resp["status"] = "bad";
+        resp["message"] = "Failed to create booking";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k500InternalServerError);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        callback(response);
+        return;
+    }
+    
+    char* user_sql = sqlite3_mprintf("SELECT username, nickname FROM users WHERE id = %d", user_id);
+    vector<vector<string>> user_info = db.Sql_request_vector(user_sql);
+    sqlite3_free(user_sql);
+    
+    Json::Value resp;
+    resp["status"] = "ok";
+    resp["message"] = "Booking created successfully";
+    resp["booking"]["id"] = booking_id;
+    resp["booking"]["cat_id"] = cat_id;
+    resp["booking"]["user_id"] = user_id;
+    resp["booking"]["start_time"] = start;
+    resp["booking"]["end_time"] = end;
+    
+    if (!user_info.empty()) {
+        resp["booking"]["user"]["username"] = user_info[0][0];
+        resp["booking"]["user"]["nickname"] = user_info[0][1];
+    }
     
     auto response = HttpResponse::newHttpJsonResponse(resp);
     response->setStatusCode(k201Created);

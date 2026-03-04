@@ -39,4 +39,8 @@ class Handler{
         static void handleOptions(const HttpRequestPtr& req, function<void(const HttpResponsePtr&)>&& callback);
 
         static void uploadCatPhoto(const HttpRequestPtr& req, function<void(const HttpResponsePtr&)>&& callback);
+
+        static void AddToBookings(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback);
+
+        static void updateCatTagsAndMedical(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback);
 };

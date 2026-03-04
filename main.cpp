@@ -26,6 +26,11 @@ int main() {
     app().registerHandler("/cats", &Handler::GetCats, {Get});
     app().registerHandler("/cats", &Handler::handleOptions, {Options});
     app().registerHandler("/cats", &Handler::uploadCatPhoto, {Post});
+    app().registerHandler("/cats/{id}",&Handler::updateCatTagsAndMedical,{Put});
+
+    app().registerHandler("/bookings",&Handler::AddToBookings,{Post});
+    app().registerHandler("/bookings", &Handler::handleOptions, {Options});
+    
 
     cout<<"server is running"<<endl;
     app().addListener("0.0.0.0", 8000).run();
