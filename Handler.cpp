@@ -44,7 +44,7 @@ bool Handler::CheckPermissions(int user_id){
     char* sql = sqlite3_mprintf("SELECT access_level FROM users WHERE id = %d",user_id);
     vector<vector<string>> result = db.Sql_request_vector(sql);
     sqlite3_free(sql);
-    if(result[0][0]=="0" || result.empty()){
+    if(result.empty() || result[0][0]=="0"){
         return false;
     }else{
         return true;
