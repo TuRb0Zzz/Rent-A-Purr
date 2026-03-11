@@ -21,11 +21,12 @@
         //tables
         Sql_exec("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, nickname TEXT NOT NULL, password TEXT NOT NULL, access_level INTEGER DEFAULT 0 CHECK(access_level IN (0, 1)));");
         Sql_exec("CREATE TABLE IF NOT EXISTS sessions (session_id TEXT PRIMARY KEY, user_id INTEGER UNIQUE NOT NULL, expires_at DATETIME NOT NULL, FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE);");
-        Sql_exec("CREATE TABLE IF NOT EXISTS cats (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT, breed TEXT, age TEXT, photo_filename TEXT);");
+        Sql_exec("CREATE TABLE IF NOT EXISTS cats (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, description TEXT, breed TEXT, age TEXT);");
         Sql_exec("CREATE TABLE IF NOT EXISTS bookings (id INTEGER PRIMARY KEY AUTOINCREMENT, cat_id INTEGER NOT NULL, user_id INTEGER NOT NULL, start_time DATETIME NOT NULL, end_time DATETIME NOT NULL, status INTEGER DEFAULT 0 CHECK(status IN (0, 1)), FOREIGN KEY (cat_id) REFERENCES cats(id) ON DELETE CASCADE, FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE);");
         Sql_exec("CREATE TABLE IF NOT EXISTS tags (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL);");
         Sql_exec("CREATE TABLE IF NOT EXISTS cat_tags (cat_id INTEGER REFERENCES cats(id) ON DELETE CASCADE, tag_id INTEGER REFERENCES tags(id) ON DELETE CASCADE, PRIMARY KEY (cat_id, tag_id));");
         Sql_exec("CREATE TABLE IF NOT EXISTS medical (id INTEGER PRIMARY KEY AUTOINCREMENT, cat_id INTEGER REFERENCES cats(id) ON DELETE CASCADE, icon TEXT, label TEXT, color TEXT, bg TEXT);");
+        Sql_exec("CREATE TABLE IF NOT EXISTS cat_photos (id INTEGER PRIMARY KEY AUTOINCREMENT, cat_id INTEGER NOT NULL, filename TEXT NOT NULL, FOREIGN KEY (cat_id) REFERENCES cats(id) ON DELETE CASCADE);");
         //index
         Sql_exec("CREATE INDEX IF NOT EXISTS idx_bookings_cat_time ON bookings(cat_id, start_time, end_time);");
         Sql_exec("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);");

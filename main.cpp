@@ -2,6 +2,7 @@
 #include "Handler.h"
 #include "DataBase.h"
 
+
 using namespace drogon;
 using namespace std;
 
@@ -12,15 +13,41 @@ DataBase db;
 
 
 int main() {
+
     app().setThreadNum(4);
-    app().setDocumentRoot("../images");
-    app().setStaticFileHeaders({{"Cache-Control", "public, max-age=86400"}});
+    app().setDocumentRoot("../images/");
+    app().setStaticFileHeaders({
+        {"Cache-Control", "public, max-age=86400"},
+        {"Access-Control-Allow-Origin", "http://localhost:5173"},
+        {"Access-Control-Allow-Credentials", "true"}
+    });
+
+
+    app().registerPreRoutingAdvice([](const drogon::HttpRequestPtr &req, drogon::FilterCallback &&defer, drogon::FilterChainCallback &&chain) {
+        if (req->method() == drogon::Options) {
+            auto resp = drogon::HttpResponse::newHttpResponse();
+            resp->setStatusCode(drogon::k200OK);
+            
+            string origin = req->getHeader("Origin");
+            if (origin.empty()) origin = "http://localhost:5173";
+            
+            resp->addHeader("Access-Control-Allow-Origin", origin);
+            resp->addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+            resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Accept, Authorization, X-Requested-With, Cookie");
+            resp->addHeader("Access-Control-Allow-Credentials", "true");
+            resp->addHeader("Access-Control-Max-Age", "3600");
+            
+            defer(resp);
+            return;
+        }
+        chain();
+    });
 
 
     app().registerHandler("/register", &Handler::RegisterUser, {Post});
     app().registerHandler("/register", &Handler::handleOptions, {Options});
 
-    app().registerHandler("/login", &Handler::AutoriseUser, {Get});
+    app().registerHandler("/login", &Handler::AutoriseUser, {Post});
     app().registerHandler("/login", &Handler::handleOptions, {Options});
 
     app().registerHandler("/cats", &Handler::GetCats, {Get});
@@ -40,8 +67,9 @@ int main() {
     app().registerHandler("/bookings/admin",&Handler::RejectAdminBooking,{Delete});
     app().registerHandler("/bookings/admin", &Handler::handleOptions, {Options});
 
+
     cout<<"server is running"<<endl;
-    
+
     app().addListener("0.0.0.0", 8000).run();
 
     return 0;

@@ -113,6 +113,8 @@ void Handler::RegisterUser(const HttpRequestPtr& request,function<void(const Htt
         bad_answer["message"]="Bad Json";
         auto response = HttpResponse::newHttpJsonResponse(bad_answer);
         response->setStatusCode(k400BadRequest);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -129,6 +131,8 @@ void Handler::RegisterUser(const HttpRequestPtr& request,function<void(const Htt
         bad_answer["message"]="User already exists";
         auto response = HttpResponse::newHttpJsonResponse(bad_answer);
         response->setStatusCode(k409Conflict);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -140,6 +144,8 @@ void Handler::RegisterUser(const HttpRequestPtr& request,function<void(const Htt
         bad_answer["message"]="Cant insert Data";
         auto response = HttpResponse::newHttpJsonResponse(bad_answer);
         response->setStatusCode(k500InternalServerError);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -155,11 +161,12 @@ void Handler::RegisterUser(const HttpRequestPtr& request,function<void(const Htt
 
     auto response = HttpResponse::newHttpJsonResponse(resp);
     if(session_id!=""){
-        response->addHeader("Set-Cookie","session_id=" + session_id + "; Max-Age=86400; Path=/; HttpOnly");
+        response->addHeader("Set-Cookie","session_id=" + session_id + "; Max-Age=86400; Path=/; HttpOnly; SameSite=None; Secure");
         response->addHeader("Access-Control-Allow-Credentials", "true");
     } 
     response->setStatusCode(k201Created);
-    response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+    response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+    response->addHeader("Access-Control-Allow-Credentials", "true");
     callback(response);
 }
 
@@ -173,6 +180,8 @@ void Handler::AutoriseUser(const HttpRequestPtr& request,function<void(const Htt
         bad_answer["message"]="Bad Json";
         auto response = HttpResponse::newHttpJsonResponse(bad_answer);
         response->setStatusCode(k400BadRequest);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -189,6 +198,8 @@ void Handler::AutoriseUser(const HttpRequestPtr& request,function<void(const Htt
         bad_answer["message"]="Wrong username or password";
         auto response = HttpResponse::newHttpJsonResponse(bad_answer);
         response->setStatusCode(k401Unauthorized);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -198,24 +209,28 @@ void Handler::AutoriseUser(const HttpRequestPtr& request,function<void(const Htt
         bad_answer["message"]="Wrong username or password";
         auto response = HttpResponse::newHttpJsonResponse(bad_answer);
         response->setStatusCode(k401Unauthorized);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
 
     Json::Value resp;
-    resp["status"]="ok";
+    resp["status"] = "ok";
     resp["message"] = "User authorized";
-    resp["nickname"]=check[0][2];
+    resp["user"]["nickname"] = check[0][2];
+    resp["user"]["user_id"] = stoi(check[0][0]);
     auto response = HttpResponse::newHttpJsonResponse(resp);
 
     string session_id = createSession(stoi(check[0][0]));
 
     if(session_id!=""){
-        response->addHeader("Set-Cookie","session_id=" + session_id + "; Max-Age=86400; Path=/; HttpOnly");
+        response->addHeader("Set-Cookie","session_id=" + session_id + "; Max-Age=86400; Path=/; HttpOnly; SameSite=None; Secure");
         response->addHeader("Access-Control-Allow-Credentials", "true");        
     }
     response->setStatusCode(k200OK);
-    response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+    response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+    response->addHeader("Access-Control-Allow-Credentials", "true");
     callback(response);
 }
 
@@ -226,7 +241,7 @@ void Handler::GetCats(const HttpRequestPtr& request, function<void(const HttpRes
     Json::Value cats(Json::arrayValue);
 
     char* sql = sqlite3_mprintf(
-        "SELECT cats.*, "
+        "SELECT cats.id, cats.name, cats.description, cats.breed, cats.age, "
         "GROUP_CONCAT(tags.name) as tags "
         "FROM cats "
         "LEFT JOIN cat_tags ON cats.id = cat_tags.cat_id "
@@ -236,6 +251,19 @@ void Handler::GetCats(const HttpRequestPtr& request, function<void(const HttpRes
 
     vector<vector<string>> cats_data = db.Sql_request_vector(sql);
     sqlite3_free(sql);
+
+    sql = sqlite3_mprintf(
+        "SELECT cat_id, filename FROM cat_photos ORDER BY cat_id, id"
+    );
+    
+    vector<vector<string>> all_photos = db.Sql_request_vector(sql);
+    sqlite3_free(sql);
+    
+    map<int, vector<string>> photos_by_cat;
+    for (const auto& photo : all_photos) {
+        int cat_id = stoi(photo[0]);
+        photos_by_cat[cat_id].push_back(photo[1]);
+    }
 
     sql = sqlite3_mprintf(
         "SELECT cat_id, user_id, start_time, end_time "
@@ -254,8 +282,7 @@ void Handler::GetCats(const HttpRequestPtr& request, function<void(const HttpRes
 
     sql = sqlite3_mprintf(
         "SELECT cat_id, id, icon, label, color, bg "
-        "FROM medical "
-        "ORDER BY cat_id"
+        "FROM medical ORDER BY cat_id"
     );
 
     vector<vector<string>> all_medical = db.Sql_request_vector(sql);
@@ -276,11 +303,10 @@ void Handler::GetCats(const HttpRequestPtr& request, function<void(const HttpRes
         cat["description"] = cat_row[2];
         cat["breed"] = cat_row[3];
         cat["age"] = cat_row[4];
-        cat["filename"] = cat_row[5];
 
         Json::Value tags(Json::arrayValue);
-        if (!cat_row[6].empty()) {
-            string tags_string = cat_row[6];
+        if (!cat_row[5].empty()) {
+            string tags_string = cat_row[5];
             size_t pos = 0;
             while ((pos = tags_string.find(',')) != string::npos) {
                 tags.append(tags_string.substr(0, pos));
@@ -289,6 +315,14 @@ void Handler::GetCats(const HttpRequestPtr& request, function<void(const HttpRes
             tags.append(tags_string);
         }
         cat["tags"] = tags;
+
+        Json::Value filenames(Json::arrayValue);
+        if (photos_by_cat.count(cat_id)) {
+            for (const auto& filename : photos_by_cat[cat_id]) {
+                filenames.append(filename);
+            }
+        }
+        cat["filenames"] = filenames;
 
         Json::Value bookings(Json::arrayValue);
         if (bookings_by_cat.count(cat_id)) {
@@ -324,7 +358,8 @@ void Handler::GetCats(const HttpRequestPtr& request, function<void(const HttpRes
 
     auto response = HttpResponse::newHttpJsonResponse(resp);
     response->setStatusCode(k200OK);
-    response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+    response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+    response->addHeader("Access-Control-Allow-Credentials", "true");
     callback(response);
 }
 
@@ -333,9 +368,13 @@ void Handler::handleOptions(const HttpRequestPtr& request, function<void(const H
 
     auto resp = HttpResponse::newHttpResponse();
     resp->setStatusCode(k200OK);
-    resp->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+    
+    string origin = request->getHeader("Origin");
+    if (origin.empty()) origin = "http://localhost:5173";
+    
+    resp->addHeader("Access-Control-Allow-Origin", origin);
     resp->addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    resp->addHeader("Access-Control-Allow-Headers","Content-Type, X-Tunnel-Skip-AntiPhishing-Page, Accept, Authorization, X-Requested-With");
+    resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Accept, Authorization, X-Requested-With, Cookie");
     resp->addHeader("Access-Control-Allow-Credentials", "true");
     resp->addHeader("Access-Control-Max-Age", "3600");
     callback(resp);
@@ -343,7 +382,6 @@ void Handler::handleOptions(const HttpRequestPtr& request, function<void(const H
 
 void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback) {
     cout << request->getMethodString() << " " << request->getPath() << endl;
-
 
     string sessionId = request->getCookie("session_id");
     int user_id = checkAuth(sessionId);
@@ -353,6 +391,8 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
         bad_answer["message"]="Unauthorized";
         auto response = HttpResponse::newHttpJsonResponse(bad_answer);
         response->setStatusCode(k401Unauthorized);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -362,6 +402,8 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
         bad_answer["message"]="Access Denied";
         auto response = HttpResponse::newHttpJsonResponse(bad_answer);
         response->setStatusCode(k403Forbidden);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -373,22 +415,26 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
         bad_answer["message"]="Invalid multipart data";
         auto response = HttpResponse::newHttpJsonResponse(bad_answer);
         response->setStatusCode(k400BadRequest);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
     
-    if (parser.getFiles().empty()) {
+    auto& files = parser.getFiles();
+    auto& params = parser.getParameters();
+    
+    if (files.empty()) {
         Json::Value bad_answer;
         bad_answer["status"]="bad";
         bad_answer["message"]="No file uploaded";
         auto response = HttpResponse::newHttpJsonResponse(bad_answer);
         response->setStatusCode(k400BadRequest);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
-    
-    auto& file = parser.getFiles()[0];
-    auto& params = parser.getParameters();
     
     if (params.find("name") == params.end() || params.find("description") == params.end() || params.find("breed") == params.end() || params.find("age") == params.end()){
         Json::Value bad_answer;
@@ -396,6 +442,8 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
         bad_answer["message"]="Not enough parameters";
         auto response = HttpResponse::newHttpJsonResponse(bad_answer);
         response->setStatusCode(k400BadRequest);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -407,27 +455,48 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
     string cat_tags = params.find("tags") != params.end() ? params.at("tags") : "";
     string cat_medical = params.find("medical") != params.end() ? params.at("medical") : "";
 
-    string originalName = file.getFileName();
-    string ext = originalName.substr(originalName.find_last_of("."));
-
-    string newFilename = GenerateFileName(ext);
-    
-    string savePath = "../images/" + newFilename;
-    if (!file.saveAs(savePath)) {
-        Json::Value bad_answer;
-        bad_answer["status"]="bad";
-        bad_answer["message"]="Failed to save file";
-        auto response = HttpResponse::newHttpJsonResponse(bad_answer);
-        response->setStatusCode(k500InternalServerError);
-        callback(response);
-        return;
-    }
-    
-    char* sql = sqlite3_mprintf("INSERT INTO cats (name, description, breed, age, photo_filename) VALUES (%Q, %Q, %Q, %Q, %Q)",cat_name.c_str(),cat_description.c_str(),cat_breed.c_str(),cat_age.c_str(),newFilename.c_str());
+    char* sql = sqlite3_mprintf("INSERT INTO cats (name, description, breed, age) VALUES (%Q, %Q, %Q, %Q)", cat_name.c_str(), cat_description.c_str(), cat_breed.c_str(), cat_age.c_str());
     db.Sql_exec(sql);
     sqlite3_free(sql);
     
-    int cat_id =sqlite3_last_insert_rowid(db.GetDataBaseLink());
+    int cat_id = sqlite3_last_insert_rowid(db.GetDataBaseLink());
+    
+    vector<string> savedFilenames;
+    
+    for (const auto& file : files) {
+        string originalName = file.getFileName();
+        string ext = originalName.substr(originalName.find_last_of("."));
+        string newFilename = GenerateFileName(ext);
+        string savePath = "../images/" + newFilename;
+        
+        if (!file.saveAs(savePath)) {
+            for (const auto& filename : savedFilenames) {
+                string path = "../images/" + filename;
+                remove(path.c_str());
+            }
+
+            char* delete_cat_sql = sqlite3_mprintf("DELETE FROM cats WHERE id = %d", cat_id);
+            db.Sql_exec(delete_cat_sql);
+            sqlite3_free(delete_cat_sql);
+            
+            Json::Value bad_answer;
+            bad_answer["status"]="bad";
+            bad_answer["message"]="Failed to save file: " + originalName;
+            auto response = HttpResponse::newHttpJsonResponse(bad_answer);
+            response->setStatusCode(k500InternalServerError);
+            response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+            response->addHeader("Access-Control-Allow-Credentials", "true");
+            callback(response);
+            return;
+        }
+        
+        char* photo_sql = sqlite3_mprintf("INSERT INTO cat_photos (cat_id, filename) VALUES (%d, %Q)", cat_id, newFilename.c_str());
+        db.Sql_exec(photo_sql);
+        sqlite3_free(photo_sql);
+        
+        savedFilenames.push_back(newFilename);
+    }
+
     Json::Value tagsArray(Json::arrayValue);
     if(!cat_tags.empty()){
         vector<string> tag_names;
@@ -435,10 +504,8 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
         string temp_tags = cat_tags;
         while ((pos = temp_tags.find(',')) != string::npos) {
             string tag = temp_tags.substr(0, pos);
-
             tag.erase(0, tag.find_first_not_of(" \t"));
             tag.erase(tag.find_last_not_of(" \t") + 1);
-
             if (!tag.empty()) {
                 tag_names.push_back(tag);
             }
@@ -454,30 +521,30 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
         for (const string& tag_name : tag_names) {
             tagsArray.append(tag_name);
             
-            char* sql = sqlite3_mprintf("SELECT id FROM tags WHERE name = %Q",tag_name.c_str());
+            char* sql = sqlite3_mprintf("SELECT id FROM tags WHERE name = %Q", tag_name.c_str());
             int tag_id = -1;
             
-            db.Sql_request_callback(sql, [&tag_id](vector<string> output) {
-                if (!output.empty()) {
-                    tag_id = stoi(output[0]);
-                }
-            });
-            
+            vector<vector<string>> tag_result = db.Sql_request_vector(sql);
             sqlite3_free(sql);
-
-            if (tag_id == -1) {
-                char* sql = sqlite3_mprintf("INSERT INTO tags (name) VALUES (%Q)",tag_name.c_str());
-                db.Sql_exec(sql);
-                sqlite3_free(sql);
-                tag_id = sqlite3_last_insert_rowid(db.GetDataBaseLink());
+            
+            if (!tag_result.empty()) {
+                tag_id = stoi(tag_result[0][0]);
+            } else {
+                char* insert_sql = sqlite3_mprintf("INSERT INTO tags (name) VALUES (%Q)", tag_name.c_str());
+                if (db.Sql_exec(insert_sql)) {
+                    tag_id = sqlite3_last_insert_rowid(db.GetDataBaseLink());
+                }
+                sqlite3_free(insert_sql);
             }
-            if(tag_id!=-1){
-                char* sql = sqlite3_mprintf("INSERT OR IGNORE INTO cat_tags (cat_id, tag_id) VALUES (%d, %d)",cat_id, tag_id);
-                db.Sql_exec(sql);
-                sqlite3_free(sql);
+            
+            if (tag_id != -1) {
+                char* link_sql = sqlite3_mprintf("INSERT OR IGNORE INTO cat_tags (cat_id, tag_id) VALUES (%d, %d)", cat_id, tag_id);
+                db.Sql_exec(link_sql);
+                sqlite3_free(link_sql);
             }
         }
     }
+
 
     Json::Value medArray(Json::arrayValue);
     if(!cat_medical.empty()){
@@ -487,10 +554,8 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
 
         while ((pos = temp_medical.find(',')) != string::npos) {
             string field = temp_medical.substr(0, pos);
-
             field.erase(0, field.find_first_not_of(" \t"));
             field.erase(field.find_last_not_of(" \t") + 1);
-            
             medical_fields.push_back(field);
             temp_medical.erase(0, pos + 1);
         }
@@ -503,18 +568,31 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
         }
         
         if (medical_fields.size() % 4 != 0) {
+            for (const auto& filename : savedFilenames) {
+                string path = "../images/" + filename;
+                remove(path.c_str());
+            }
+            
+            char* delete_photos_sql = sqlite3_mprintf("DELETE FROM cat_photos WHERE cat_id = %d", cat_id);
+            db.Sql_exec(delete_photos_sql);
+            sqlite3_free(delete_photos_sql);
+            
+            char* delete_cat_sql = sqlite3_mprintf("DELETE FROM cats WHERE id = %d", cat_id);
+            db.Sql_exec(delete_cat_sql);
+            sqlite3_free(delete_cat_sql);
+            
             Json::Value bad_answer;
             bad_answer["status"] = "bad";
-            bad_answer["message"] = "Medical fields must be multiple of 4. Each record requires icon, label, color, bg";
+            bad_answer["message"] = "Medical fields must be multiple of 4";
             bad_answer["received_fields"] = (int)medical_fields.size();
             bad_answer["received_data"] = cat_medical;            
             auto response = HttpResponse::newHttpJsonResponse(bad_answer);
             response->setStatusCode(k400BadRequest);
-            response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+            response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+            response->addHeader("Access-Control-Allow-Credentials", "true");
             callback(response);
             return;
         }
-        
         
         for (size_t i = 0; i + 3 < medical_fields.size(); i += 4) {
             string icon = medical_fields[i];
@@ -522,7 +600,8 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
             string color = medical_fields[i + 2];
             string bg = medical_fields[i + 3];
             
-            char* med_sql = sqlite3_mprintf("INSERT INTO medical (cat_id, icon, label, color, bg) VALUES (%d, %Q, %Q, %Q, %Q)",cat_id, icon.c_str(), label.c_str(), color.c_str(), bg.c_str());
+            char* med_sql = sqlite3_mprintf("INSERT INTO medical (cat_id, icon, label, color, bg) VALUES (%d, %Q, %Q, %Q, %Q)",
+                cat_id, icon.c_str(), label.c_str(), color.c_str(), bg.c_str());
             
             if (db.Sql_exec(med_sql)) {
                 Json::Value medRecord;
@@ -540,17 +619,21 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
 
     Json::Value resp;
     resp["status"] = "ok";
-    resp["name"]=cat_name;
-    resp["description"]=cat_description;
-    resp["breed"]=cat_breed;
-    resp["age"]=cat_age;
-    resp["filename"] = newFilename;
+    resp["name"] = cat_name;
+    resp["description"] = cat_description;
+    resp["breed"] = cat_breed;
+    resp["age"] = cat_age;
+    resp["filenames"] = Json::arrayValue;
+    for (const auto& filename : savedFilenames) {
+        resp["filenames"].append(filename);
+    }
     resp["tags"] = tagsArray;
-    resp["medical"]=medArray;
+    resp["medical"] = medArray;
     
     auto response = HttpResponse::newHttpJsonResponse(resp);
     response->setStatusCode(k201Created);
-    response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+    response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+    response->addHeader("Access-Control-Allow-Credentials", "true");
     callback(response);
 }
 
@@ -569,6 +652,8 @@ void Handler::updateCatTagsAndMedical(const HttpRequestPtr& request, function<vo
         resp["path"] = url;
         resp["error"] = "not a number";
         auto responce = HttpResponse::newHttpJsonResponse(resp);
+        responce->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        responce->addHeader("Access-Control-Allow-Credentials", "true");
         callback(responce);
         return;
     }
@@ -582,7 +667,8 @@ void Handler::updateCatTagsAndMedical(const HttpRequestPtr& request, function<vo
         resp["message"] = "Unauthorized";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k401Unauthorized);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -593,7 +679,8 @@ void Handler::updateCatTagsAndMedical(const HttpRequestPtr& request, function<vo
         resp["message"] = "Access Denied";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k403Forbidden);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -608,7 +695,8 @@ void Handler::updateCatTagsAndMedical(const HttpRequestPtr& request, function<vo
         resp["message"] = "Cat not found";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k404NotFound);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -620,7 +708,8 @@ void Handler::updateCatTagsAndMedical(const HttpRequestPtr& request, function<vo
         resp["message"] = "Invalid JSON";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k400BadRequest);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -732,7 +821,8 @@ void Handler::updateCatTagsAndMedical(const HttpRequestPtr& request, function<vo
                 
                 auto response = HttpResponse::newHttpJsonResponse(error_resp);
                 response->setStatusCode(k400BadRequest);
-                response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+                response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+                response->addHeader("Access-Control-Allow-Credentials", "true");
                 callback(response);
                 return;
             }
@@ -751,7 +841,8 @@ void Handler::updateCatTagsAndMedical(const HttpRequestPtr& request, function<vo
                     
                     auto response = HttpResponse::newHttpJsonResponse(error_resp);
                     response->setStatusCode(k400BadRequest);
-                    response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+                    response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+                    response->addHeader("Access-Control-Allow-Credentials", "true");
                     callback(response);
                     return;
                 }
@@ -784,7 +875,8 @@ void Handler::updateCatTagsAndMedical(const HttpRequestPtr& request, function<vo
     
     auto response = HttpResponse::newHttpJsonResponse(response_data);
     response->setStatusCode(k200OK);
-    response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+    response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+    response->addHeader("Access-Control-Allow-Credentials", "true");
     callback(response);
 }
 
@@ -800,6 +892,8 @@ void Handler::AddToBookings(const HttpRequestPtr& request, function<void(const H
         bad_answer["message"]="Bad Json";
         auto response = HttpResponse::newHttpJsonResponse(bad_answer);
         response->setStatusCode(k400BadRequest);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -810,7 +904,8 @@ void Handler::AddToBookings(const HttpRequestPtr& request, function<void(const H
         resp["message"] = "Missing required fields: start or end or id";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k400BadRequest);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -826,7 +921,8 @@ void Handler::AddToBookings(const HttpRequestPtr& request, function<void(const H
         resp["message"] = "Unauthorized";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k401Unauthorized);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -841,7 +937,8 @@ void Handler::AddToBookings(const HttpRequestPtr& request, function<void(const H
         resp["message"] = "Cat not found";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k404NotFound);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -866,7 +963,8 @@ void Handler::AddToBookings(const HttpRequestPtr& request, function<void(const H
         resp["message"] = "Cat is already booked for this time period";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k409Conflict);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -882,7 +980,8 @@ void Handler::AddToBookings(const HttpRequestPtr& request, function<void(const H
         resp["message"] = "Failed to create booking";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k500InternalServerError);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -907,7 +1006,8 @@ void Handler::AddToBookings(const HttpRequestPtr& request, function<void(const H
     
     auto response = HttpResponse::newHttpJsonResponse(resp);
     response->setStatusCode(k201Created);
-    response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+    response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+    response->addHeader("Access-Control-Allow-Credentials", "true");
     callback(response);
 }
 
@@ -923,7 +1023,8 @@ void Handler::GetAdminBookings(const HttpRequestPtr& request, function<void(cons
         resp["message"] = "Unauthorized";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k401Unauthorized);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -934,7 +1035,8 @@ void Handler::GetAdminBookings(const HttpRequestPtr& request, function<void(cons
         resp["message"] = "Access Denied";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k403Forbidden);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -971,7 +1073,8 @@ void Handler::GetAdminBookings(const HttpRequestPtr& request, function<void(cons
     
     auto response = HttpResponse::newHttpJsonResponse(resp);
     response->setStatusCode(k200OK);
-    response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+    response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+    response->addHeader("Access-Control-Allow-Credentials", "true");
     callback(response);
 }
 
@@ -986,7 +1089,8 @@ void Handler::ConfirmAdminBookings(const HttpRequestPtr& request, function<void(
         resp["message"] = "Unauthorized";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k401Unauthorized);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -997,7 +1101,8 @@ void Handler::ConfirmAdminBookings(const HttpRequestPtr& request, function<void(
         resp["message"] = "Access Denied";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k403Forbidden);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -1009,7 +1114,8 @@ void Handler::ConfirmAdminBookings(const HttpRequestPtr& request, function<void(
         resp["message"] = "Invalid JSON";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k400BadRequest);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -1020,7 +1126,8 @@ void Handler::ConfirmAdminBookings(const HttpRequestPtr& request, function<void(
         resp["message"] = "Missing booking_id field";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k400BadRequest);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -1037,7 +1144,8 @@ void Handler::ConfirmAdminBookings(const HttpRequestPtr& request, function<void(
         resp["message"] = "Booking not found";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k404NotFound);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -1049,7 +1157,8 @@ void Handler::ConfirmAdminBookings(const HttpRequestPtr& request, function<void(
         resp["message"] = "Booking is already confirmed";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k400BadRequest);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -1065,7 +1174,8 @@ void Handler::ConfirmAdminBookings(const HttpRequestPtr& request, function<void(
         resp["message"] = "Failed to confirm booking";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k500InternalServerError);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -1075,7 +1185,8 @@ void Handler::ConfirmAdminBookings(const HttpRequestPtr& request, function<void(
     resp["message"] = "Booking confirmed successfully";
     auto response = HttpResponse::newHttpJsonResponse(resp);
     response->setStatusCode(k200OK);
-    response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+    response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+    response->addHeader("Access-Control-Allow-Credentials", "true");
     callback(response);
 }
 
@@ -1091,7 +1202,8 @@ void Handler::RejectAdminBooking(const HttpRequestPtr& request, function<void(co
         resp["message"] = "Unauthorized";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k401Unauthorized);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -1102,7 +1214,8 @@ void Handler::RejectAdminBooking(const HttpRequestPtr& request, function<void(co
         resp["message"] = "Access Denied";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k403Forbidden);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -1114,7 +1227,8 @@ void Handler::RejectAdminBooking(const HttpRequestPtr& request, function<void(co
         resp["message"] = "Invalid JSON";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k400BadRequest);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -1125,7 +1239,8 @@ void Handler::RejectAdminBooking(const HttpRequestPtr& request, function<void(co
         resp["message"] = "Missing booking_id field";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k400BadRequest);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -1142,7 +1257,8 @@ void Handler::RejectAdminBooking(const HttpRequestPtr& request, function<void(co
         resp["message"] = "Booking not found";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k404NotFound);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -1154,7 +1270,8 @@ void Handler::RejectAdminBooking(const HttpRequestPtr& request, function<void(co
         resp["message"] = "Cannot delete confirmed booking. Use cancel instead.";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k400BadRequest);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -1169,7 +1286,8 @@ void Handler::RejectAdminBooking(const HttpRequestPtr& request, function<void(co
         resp["message"] = "Failed to delete booking";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k500InternalServerError);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -1179,7 +1297,8 @@ void Handler::RejectAdminBooking(const HttpRequestPtr& request, function<void(co
     resp["message"] = "Booking rejected and deleted successfully";
     auto response = HttpResponse::newHttpJsonResponse(resp);
     response->setStatusCode(k200OK);
-    response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+    response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+    response->addHeader("Access-Control-Allow-Credentials", "true");
     callback(response);
 }
 
@@ -1195,7 +1314,8 @@ void Handler::AddAdminBooking(const HttpRequestPtr& request, function<void(const
         resp["message"] = "Unauthorized";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k401Unauthorized);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -1206,7 +1326,8 @@ void Handler::AddAdminBooking(const HttpRequestPtr& request, function<void(const
         resp["message"] = "Access Denied";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k403Forbidden);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -1218,7 +1339,8 @@ void Handler::AddAdminBooking(const HttpRequestPtr& request, function<void(const
         resp["message"] = "Invalid JSON";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k400BadRequest);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -1229,7 +1351,8 @@ void Handler::AddAdminBooking(const HttpRequestPtr& request, function<void(const
         resp["message"] = "Missing email or cat_id or start_time or end_time field";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k400BadRequest);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -1246,7 +1369,8 @@ void Handler::AddAdminBooking(const HttpRequestPtr& request, function<void(const
         resp["message"] = "User not found";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k404NotFound);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -1261,7 +1385,8 @@ void Handler::AddAdminBooking(const HttpRequestPtr& request, function<void(const
         resp["message"] = "Cat not found";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k404NotFound);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -1286,7 +1411,8 @@ void Handler::AddAdminBooking(const HttpRequestPtr& request, function<void(const
         resp["message"] = "Cat is already booked for this time period";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k409Conflict);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -1303,7 +1429,8 @@ void Handler::AddAdminBooking(const HttpRequestPtr& request, function<void(const
         resp["message"] = "Failed to create booking";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k500InternalServerError);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -1324,7 +1451,8 @@ void Handler::AddAdminBooking(const HttpRequestPtr& request, function<void(const
 
     auto response = HttpResponse::newHttpJsonResponse(resp);
     response->setStatusCode(k201Created);
-    response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+    response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+    response->addHeader("Access-Control-Allow-Credentials", "true");
     callback(response);
 }
 
@@ -1341,7 +1469,8 @@ void Handler::GetUserData(const HttpRequestPtr& request, function<void(const Htt
         resp["message"] = "Unauthorized";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k401Unauthorized);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -1355,7 +1484,8 @@ void Handler::GetUserData(const HttpRequestPtr& request, function<void(const Htt
         resp["message"] = "no user data";
         auto response = HttpResponse::newHttpJsonResponse(resp);
         response->setStatusCode(k404NotFound);
-        response->addHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
         callback(response);
         return;
     }
@@ -1367,14 +1497,24 @@ void Handler::GetUserData(const HttpRequestPtr& request, function<void(const Htt
     sql = sqlite3_mprintf("SELECT cat_id, user_id, start_time, end_time, status FROM bookings WHERE user_id=%d",user_id);
     Json::Value bookings(Json::arrayValue);
     db.Sql_request_callback(sql,[&bookings](vector<string> bookings_string){
-        Json::Value bookings_array(Json::arrayValue);
-        bookings_array["cat_id"]=stoi(bookings_string[0]);
-        bookings_array["user_id"]=stoi(bookings_string[1]);
-        bookings_array["start_time"]=bookings_string[2];
-        bookings_array["end_time"]=bookings_string[3];
-        bookings_array["status"]=stoi(bookings_string[4]);
-        bookings.append(bookings_array);
+        Json::Value booking;
+        booking["cat_id"]=stoi(bookings_string[0]);
+        booking["user_id"]=stoi(bookings_string[1]);
+        booking["start_time"]=bookings_string[2];
+        booking["end_time"]=bookings_string[3];
+        booking["status"]=stoi(bookings_string[4]);
+        bookings.append(booking);
     });
+    sqlite3_free(sql);
     user_data["bookings"]=bookings;
-}
 
+    Json::Value resp;
+    resp["status"] = "ok";
+    resp["user"] = user_data;
+
+    auto response = HttpResponse::newHttpJsonResponse(resp);
+    response->setStatusCode(k200OK);
+    response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+    response->addHeader("Access-Control-Allow-Credentials", "true");
+    callback(response);
+}
