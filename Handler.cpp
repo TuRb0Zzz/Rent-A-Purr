@@ -1519,17 +1519,40 @@ void Handler::GetUserData(const HttpRequestPtr& request, function<void(const Htt
     user_data["user_id"] = stoi(user_data_vector[0][0]);
     user_data["nickname"] = user_data_vector[0][1];
 
-    sql = sqlite3_mprintf("SELECT cat_id, user_id, start_time, end_time, status FROM bookings WHERE user_id=%d", user_id);
+    sql = sqlite3_mprintf(
+        "SELECT b.cat_id, b.user_id, b.start_time, b.end_time, b.status, "
+        "GROUP_CONCAT(cp.filename) as photos "
+        "FROM bookings b "
+        "LEFT JOIN cat_photos cp ON b.cat_id = cp.cat_id "
+        "WHERE b.user_id = %d "
+        "GROUP BY b.id",
+        user_id
+    );
+    
     Json::Value bookings(Json::arrayValue);
-    db.Sql_request_callback(sql, [&bookings](vector<string> bookings_string){
+    db.Sql_request_callback(sql, [&bookings](vector<string> row){
         Json::Value booking;
-        booking["cat_id"] = stoi(bookings_string[0]);
-        booking["user_id"] = stoi(bookings_string[1]);
-        booking["start_time"] = bookings_string[2];
-        booking["end_time"] = bookings_string[3];
-        booking["status"] = stoi(bookings_string[4]);
+        booking["cat_id"] = stoi(row[0]);
+        booking["user_id"] = stoi(row[1]);
+        booking["start_time"] = row[2];
+        booking["end_time"] = row[3];
+        booking["status"] = stoi(row[4]);
+        
+        Json::Value filenames(Json::arrayValue);
+        if (!row[5].empty()) {
+            string photos_string = row[5];
+            size_t pos = 0;
+            while ((pos = photos_string.find(',')) != string::npos) {
+                filenames.append(photos_string.substr(0, pos));
+                photos_string.erase(0, pos + 1);
+            }
+            filenames.append(photos_string);
+        }
+        
+        booking["filenames"] = filenames;
         bookings.append(booking);
     });
+    
     sqlite3_free(sql);
     user_data["bookings"] = bookings;
 
