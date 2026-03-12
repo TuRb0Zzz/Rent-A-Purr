@@ -38,8 +38,6 @@ class Handler{
 
         static void GetCats(const HttpRequestPtr& req, function<void(const HttpResponsePtr&)>&& callback);
 
-        static void handleOptions(const HttpRequestPtr& req, function<void(const HttpResponsePtr&)>&& callback);
-
         static void uploadCatPhoto(const HttpRequestPtr& req, function<void(const HttpResponsePtr&)>&& callback);
 
         static void AddToBookings(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback);
@@ -55,4 +53,6 @@ class Handler{
         static void RejectAdminBooking(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback);
 
         static void GetUserData(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback);
+
+        static void LogOut(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback);
 };

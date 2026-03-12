@@ -387,23 +387,6 @@ void Handler::GetCats(const HttpRequestPtr& request, function<void(const HttpRes
     callback(response);
 }
 
-void Handler::handleOptions(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback) {
-    cout << request->getMethodString() << " " << request->getPath() << endl;
-
-    auto resp = HttpResponse::newHttpResponse();
-    resp->setStatusCode(k200OK);
-    
-    string origin = request->getHeader("Origin");
-    if (origin.empty()) origin = "http://localhost:5173";
-    
-    resp->addHeader("Access-Control-Allow-Origin", origin);
-    resp->addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-    resp->addHeader("Access-Control-Allow-Headers", "Content-Type, Accept, Authorization, X-Requested-With, Cookie");
-    resp->addHeader("Access-Control-Allow-Credentials", "true");
-    resp->addHeader("Access-Control-Max-Age", "3600");
-    callback(resp);
-}
-
 void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback) {
     cout << request->getMethodString() << " " << request->getPath() << endl;
 
@@ -1565,3 +1548,49 @@ void Handler::GetUserData(const HttpRequestPtr& request, function<void(const Htt
     response->addHeader("Access-Control-Allow-Credentials", "true");
     callback(response);
 }
+
+void Handler::LogOut(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback) {
+    cout << request->getMethodString() << " " << request->getPath() << endl;
+
+    string sessionId = request->getCookie("session_id");
+    
+    Json::Value resp;
+    
+    if (sessionId.empty()) {
+        resp["status"] = "ok";
+        resp["message"] = "Already logged out";
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->setStatusCode(k200OK);
+        
+        string clearCookie = "session_id=; Max-Age=0; Path=/; HttpOnly; SameSite=None; Secure";
+        response->addHeader("Set-Cookie", clearCookie);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
+        
+        callback(response);
+        return;
+    }
+
+    char* sql = sqlite3_mprintf("DELETE FROM sessions WHERE session_id = %Q", sessionId.c_str());
+    bool success = db.Sql_exec(sql);
+    sqlite3_free(sql);
+
+    if (success) {
+        resp["status"] = "ok";
+        resp["message"] = "Logged out successfully";
+    } else {
+        resp["status"] = "bad";
+        resp["message"] = "Failed to logout";
+    }
+
+    auto response = HttpResponse::newHttpJsonResponse(resp);
+    
+    string clearCookie = "session_id=; Max-Age=0; Path=/; HttpOnly; SameSite=None; Secure";
+    response->addHeader("Set-Cookie", clearCookie);
+    
+    response->setStatusCode(success ? k200OK : k500InternalServerError);
+    response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+    response->addHeader("Access-Control-Allow-Credentials", "true");
+    callback(response);
+}
+

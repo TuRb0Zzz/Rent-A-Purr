@@ -24,12 +24,14 @@ int main() {
 
 
     app().registerPreRoutingAdvice([](const drogon::HttpRequestPtr &req, drogon::FilterCallback &&defer, drogon::FilterChainCallback &&chain) {
-        if (req->method() == drogon::Options) {
+        if (req->method() == Options) {
             auto resp = drogon::HttpResponse::newHttpResponse();
-            resp->setStatusCode(drogon::k200OK);
+            resp->setStatusCode(k200OK);
             
             string origin = req->getHeader("Origin");
-            if (origin.empty()) origin = "http://localhost:5173";
+            if (origin.empty()){
+                origin = "http://localhost:5173";
+            }
             
             resp->addHeader("Access-Control-Allow-Origin", origin);
             resp->addHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -45,28 +47,23 @@ int main() {
 
 
     app().registerHandler("/register", &Handler::RegisterUser, {Post});
-    app().registerHandler("/register", &Handler::handleOptions, {Options});
 
     app().registerHandler("/login", &Handler::AutoriseUser, {Post});
-    app().registerHandler("/login", &Handler::handleOptions, {Options});
 
     app().registerHandler("/cats", &Handler::GetCats, {Get});
-    app().registerHandler("/cats", &Handler::handleOptions, {Options});
     app().registerHandler("/cats", &Handler::uploadCatPhoto, {Post});
     app().registerHandler("/cats/{id}",&Handler::updateCatTagsAndMedical,{Put});
 
     app().registerHandler("/bookings",&Handler::AddToBookings,{Post});
-    app().registerHandler("/bookings", &Handler::handleOptions, {Options});
 
     app().registerHandler("/profile",&Handler::GetUserData,{Get});
-    app().registerHandler("/profile",&Handler::handleOptions,{Options});
 
     app().registerHandler("/bookings/admin",&Handler::GetAdminBookings,{Get});
     app().registerHandler("/bookings/admin",&Handler::AddAdminBooking,{Post});
     app().registerHandler("/bookings/admin",&Handler::ConfirmAdminBookings,{Put});
     app().registerHandler("/bookings/admin",&Handler::RejectAdminBooking,{Delete});
-    app().registerHandler("/bookings/admin", &Handler::handleOptions, {Options});
 
+    app().registerHandler("/logout",&Handler::LogOut,{Post});
 
     cout<<"server is running"<<endl;
 
