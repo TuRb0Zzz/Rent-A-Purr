@@ -644,27 +644,27 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
     callback(response);
 }
 
-void Handler::updateCatTagsAndMedical(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback) {
+void Handler::updateCat(const HttpRequestPtr& request, function<void(const HttpResponsePtr&)>&& callback) {
     cout << request->getMethodString() << " " << request->getPath() << endl;
 
     string url = request->getPath();
     size_t poz = url.find_last_of('/');
     string id = url.substr(poz+1);
-    int cat_id=-1;
-    try{
+    int cat_id = -1;
+    try {
         cat_id = stoi(id);
-    }catch(const std::exception& e){
+    } catch(const std::exception& e) {
         Json::Value resp;
         resp["id"] = id;
         resp["path"] = url;
         resp["error"] = "not a number";
-        auto responce = HttpResponse::newHttpJsonResponse(resp);
-        responce->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
-        responce->addHeader("Access-Control-Allow-Credentials", "true");
-        callback(responce);
+        auto response = HttpResponse::newHttpJsonResponse(resp);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
+        callback(response);
         return;
     }
-    cout << "PUT /cats/" << cat_id << endl;
+
     string sessionId = request->getCookie("session_id");
     int user_id = checkAuth(sessionId);
     
@@ -692,11 +692,11 @@ void Handler::updateCatTagsAndMedical(const HttpRequestPtr& request, function<vo
         return;
     }
     
-    char* check_sql = sqlite3_mprintf("SELECT id FROM cats WHERE id = %d", cat_id);
-    vector<vector<string>> check_result = db.Sql_request_vector(check_sql);
-    sqlite3_free(check_sql);
+    char* get_cat_sql = sqlite3_mprintf("SELECT name, description, breed, age FROM cats WHERE id = %d", cat_id);
+    vector<vector<string>> cat_data = db.Sql_request_vector(get_cat_sql);
+    sqlite3_free(get_cat_sql);
     
-    if (check_result.empty()) {
+    if (cat_data.empty()) {
         Json::Value resp;
         resp["status"] = "bad";
         resp["message"] = "Cat not found";
@@ -724,6 +724,24 @@ void Handler::updateCatTagsAndMedical(const HttpRequestPtr& request, function<vo
     Json::Value response_data;
     response_data["status"] = "ok";
     response_data["cat_id"] = cat_id;
+    
+    string new_name = json->isMember("name") ? (*json)["name"].asString() : cat_data[0][0];
+    string new_description = json->isMember("description") ? (*json)["description"].asString() : cat_data[0][1];
+    string new_breed = json->isMember("breed") ? (*json)["breed"].asString() : cat_data[0][2];
+    string new_age = json->isMember("age") ? (*json)["age"].asString() : cat_data[0][3];
+    
+    char* update_cat_sql = sqlite3_mprintf(
+        "UPDATE cats SET name = %Q, description = %Q, breed = %Q, age = %Q WHERE id = %d",
+        new_name.c_str(), new_description.c_str(), new_breed.c_str(), new_age.c_str(), cat_id
+    );
+    db.Sql_exec(update_cat_sql);
+    sqlite3_free(update_cat_sql);
+    
+    response_data["updated_cat"] = Json::objectValue;
+    response_data["updated_cat"]["name"] = new_name;
+    response_data["updated_cat"]["description"] = new_description;
+    response_data["updated_cat"]["breed"] = new_breed;
+    response_data["updated_cat"]["age"] = new_age;
     
     if (json->isMember("tags")) {
         string tags_string = (*json)["tags"].asString();
@@ -780,7 +798,7 @@ void Handler::updateCatTagsAndMedical(const HttpRequestPtr& request, function<vo
                 }
                 
                 if (tag_id != -1) {
-                    char* link_sql = sqlite3_mprintf("INSERT INTO cat_tags (cat_id, tag_id) VALUES (%d, %d)",cat_id, tag_id);
+                    char* link_sql = sqlite3_mprintf("INSERT INTO cat_tags (cat_id, tag_id) VALUES (%d, %d)", cat_id, tag_id);
                     db.Sql_exec(link_sql);
                     sqlite3_free(link_sql);
                 }
@@ -840,20 +858,6 @@ void Handler::updateCatTagsAndMedical(const HttpRequestPtr& request, function<vo
                 string color = medical_fields[i + 2];
                 string bg = medical_fields[i + 3];
                 
-                if (icon.empty() || label.empty() || color.empty() || bg.empty()) {
-                    Json::Value error_resp;
-                    error_resp["status"] = "bad";
-                    error_resp["message"] = "Medical fields cannot be empty";
-                    error_resp["record_index"] = (int)(i / 4);
-                    
-                    auto response = HttpResponse::newHttpJsonResponse(error_resp);
-                    response->setStatusCode(k400BadRequest);
-                    response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
-                    response->addHeader("Access-Control-Allow-Credentials", "true");
-                    callback(response);
-                    return;
-                }
-                
                 char* med_sql = sqlite3_mprintf(
                     "INSERT INTO medical (cat_id, icon, label, color, bg) VALUES (%d, %Q, %Q, %Q, %Q)",
                     cat_id, icon.c_str(), label.c_str(), color.c_str(), bg.c_str()
@@ -874,10 +878,6 @@ void Handler::updateCatTagsAndMedical(const HttpRequestPtr& request, function<vo
         }
         
         response_data["medical"] = medArray;
-    }
-    
-    if (!json->isMember("tags") && !json->isMember("medical")) {
-        response_data["message"] = "No updates provided. Use 'tags' or 'medical' fields";
     }
     
     auto response = HttpResponse::newHttpJsonResponse(response_data);
@@ -1051,13 +1051,12 @@ void Handler::GetAdminBookings(const HttpRequestPtr& request, function<void(cons
     Json::Value bookings(Json::arrayValue);
     
     char* sql = sqlite3_mprintf(
-        "SELECT b.id, b.cat_id, c.name as cat_name, b.user_id, u.nickname, "
-        "b.start_time, b.end_time "
-        "FROM bookings b "
-        "JOIN cats c ON b.cat_id = c.id "
-        "JOIN users u ON b.user_id = u.id "
-        "WHERE b.status = 0 "
-        "ORDER BY b.start_time"
+    "SELECT b.id, b.cat_id, c.name as cat_name, b.user_id, u.nickname, "
+    "b.start_time, b.end_time, b.status "
+    "FROM bookings b "
+    "JOIN cats c ON b.cat_id = c.id "
+    "JOIN users u ON b.user_id = u.id "
+    "ORDER BY b.status, b.start_time"
     );
     
     db.Sql_request_callback(sql, [&bookings](vector<string> output) {
@@ -1069,6 +1068,7 @@ void Handler::GetAdminBookings(const HttpRequestPtr& request, function<void(cons
         booking["nickname"] = output[4];
         booking["start_time"] = output[5];
         booking["end_time"] = output[6];
+        booking["status"] = stoi(output[7]);
         bookings.append(booking);
     });
     
@@ -1481,7 +1481,7 @@ void Handler::GetUserData(const HttpRequestPtr& request, function<void(const Htt
         return;
     }
 
-    char* sql = sqlite3_mprintf("SELECT id, nickname FROM users WHERE id=%d", user_id);
+    char* sql = sqlite3_mprintf("SELECT id, nickname, access_level FROM users WHERE id=%d", user_id);
     vector<vector<string>> user_data_vector = db.Sql_request_vector(sql);
     sqlite3_free(sql);
     
@@ -1500,6 +1500,7 @@ void Handler::GetUserData(const HttpRequestPtr& request, function<void(const Htt
     Json::Value user_data;
     user_data["user_id"] = stoi(user_data_vector[0][0]);
     user_data["nickname"] = user_data_vector[0][1];
+    user_data["status"]=stoi(user_data_vector[0][2]);
 
     sql = sqlite3_mprintf(
         "SELECT b.cat_id, b.user_id, b.start_time, b.end_time, b.status, "

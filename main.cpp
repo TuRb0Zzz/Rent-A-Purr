@@ -22,7 +22,7 @@ int main() {
         {"Access-Control-Allow-Credentials", "true"}
     });
 
-
+    
     app().registerPreRoutingAdvice([](const drogon::HttpRequestPtr &req, drogon::FilterCallback &&defer, drogon::FilterChainCallback &&chain) {
         if (req->method() == Options) {
             auto resp = drogon::HttpResponse::newHttpResponse();
@@ -52,7 +52,7 @@ int main() {
 
     app().registerHandler("/cats", &Handler::GetCats, {Get});
     app().registerHandler("/cats", &Handler::uploadCatPhoto, {Post});
-    app().registerHandler("/cats/{id}",&Handler::updateCatTagsAndMedical,{Put});
+    app().registerHandler("/cats/{id}",&Handler::updateCat,{Put});
 
     app().registerHandler("/bookings",&Handler::AddToBookings,{Post});
 
