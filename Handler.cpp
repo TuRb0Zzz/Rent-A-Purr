@@ -1083,7 +1083,7 @@ void Handler::GetAdminBookings(const HttpRequestPtr& request, function<void(cons
     Json::Value bookings(Json::arrayValue);
     
     char* sql = sqlite3_mprintf(
-    "SELECT b.id, b.cat_id, c.name as cat_name, b.user_id, u.nickname, "
+    "SELECT b.id, b.cat_id, c.name as cat_name, b.user_id, u.nickname, u.phone, "
     "b.start_time, b.end_time, b.status "
     "FROM bookings b "
     "JOIN cats c ON b.cat_id = c.id "
@@ -1098,9 +1098,10 @@ void Handler::GetAdminBookings(const HttpRequestPtr& request, function<void(cons
         booking["cat_name"] = output[2];
         booking["user_id"] = stoi(output[3]);
         booking["nickname"] = output[4];
-        booking["start_time"] = output[5];
-        booking["end_time"] = output[6];
-        booking["status"] = stoi(output[7]);
+        booking["phone"] = output[5];
+        booking["start_time"] = output[6];
+        booking["end_time"] = output[7];
+        booking["status"] = stoi(output[8]);
         bookings.append(booking);
     });
     
