@@ -1,6 +1,7 @@
 #include "Handler.h"
 #include <json/json.h>     
-#include <iostream>         
+#include <iostream>
+#include <fstream>         
 #include <string>
 #include <sqlite3.h>
 using namespace drogon;     
@@ -477,8 +478,21 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
     string cat_medical = params.find("medical") != params.end() ? params.at("medical") : "";
 
     char* sql = sqlite3_mprintf("INSERT INTO cats (name, description, breed, age) VALUES (%Q, %Q, %Q, %Q)", cat_name.c_str(), cat_description.c_str(), cat_breed.c_str(), cat_age.c_str());
-    db.Sql_exec(sql);
+    
+    bool insert_success = db.Sql_exec(sql);
     sqlite3_free(sql);
+    
+    if (!insert_success) {
+        Json::Value bad_answer;
+        bad_answer["status"] = "bad";
+        bad_answer["message"] = "Failed to insert cat into database";
+        auto response = HttpResponse::newHttpJsonResponse(bad_answer);
+        response->setStatusCode(k500InternalServerError);
+        response->addHeader("Access-Control-Allow-Origin", "http://localhost:5173");
+        response->addHeader("Access-Control-Allow-Credentials", "true");
+        callback(response);
+        return;
+    }
     
     int cat_id = sqlite3_last_insert_rowid(db.GetDataBaseLink());
     
@@ -490,7 +504,13 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
         string newFilename = GenerateFileName(ext);
         string savePath = "../images/" + newFilename;
         
-        if (!file.saveAs(savePath)) {
+        bool saveResult = file.saveAs(savePath);
+        
+        ifstream checkFile(savePath);
+        bool fileExists = checkFile.good();
+        checkFile.close();
+        
+        if (!fileExists) {      
             for (const auto& filename : savedFilenames) {
                 string path = "../images/" + filename;
                 remove(path.c_str());
@@ -514,7 +534,6 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
         char* photo_sql = sqlite3_mprintf("INSERT INTO cat_photos (cat_id, filename) VALUES (%d, %Q)", cat_id, newFilename.c_str());
         db.Sql_exec(photo_sql);
         sqlite3_free(photo_sql);
-        
         savedFilenames.push_back(newFilename);
     }
 
@@ -621,8 +640,7 @@ void Handler::uploadCatPhoto(const HttpRequestPtr& request, function<void(const 
             string color = medical_fields[i + 2];
             string bg = medical_fields[i + 3];
             
-            char* med_sql = sqlite3_mprintf("INSERT INTO medical (cat_id, icon, label, color, bg) VALUES (%d, %Q, %Q, %Q, %Q)",
-                cat_id, icon.c_str(), label.c_str(), color.c_str(), bg.c_str());
+            char* med_sql = sqlite3_mprintf("INSERT INTO medical (cat_id, icon, label, color, bg) VALUES (%d, %Q, %Q, %Q, %Q)", cat_id, icon.c_str(), label.c_str(), color.c_str(), bg.c_str());
             
             if (db.Sql_exec(med_sql)) {
                 Json::Value medRecord;
@@ -1609,4 +1627,3 @@ void Handler::LogOut(const HttpRequestPtr& request, function<void(const HttpResp
     response->addHeader("Access-Control-Allow-Credentials", "true");
     callback(response);
 }
-

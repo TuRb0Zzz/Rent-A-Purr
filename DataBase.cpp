@@ -88,6 +88,7 @@
         int answer_from_db = sqlite3_exec(db,sql_string.c_str(),nullptr,nullptr,&error_message);
         if(answer_from_db!=SQLITE_OK){
             cout<<"error: "<<error_message<<endl;
+            cout<<sql_string<<endl;
             sqlite3_free(error_message);
             error_message=nullptr;
             return false;
