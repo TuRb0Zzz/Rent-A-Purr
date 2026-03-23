@@ -30,16 +30,24 @@ export default function Management() {
     const[isAddReqOpen, setIsAddReqOpen] = useState(false);
     const [reqToEdit, setReqToEdit] = useState(null);
 
-    // Загрузка данных
     const loadData = async () => {
         setLoading(true);
         try {
-            const[catsRes, bookingsRes] = await Promise.all([
+            const [catsRes, bookingsRes] = await Promise.all([
                 api.getCats(),
                 api.getAdminBookings().catch(() => ({ bookings: [] }))
             ]);
-            setCats(catsRes.cats ||[]);
-            setBookings(bookingsRes.bookings ||[]);
+
+            setCats(catsRes.cats || []);
+            const fetchedBookings = bookingsRes.bookings || [];
+            const mappedBookings = fetchedBookings.map(b => ({
+                ...b,
+                status: b.status !== undefined ? b.status : 1,
+                email: b.email || 'Нет email'
+            }));
+
+            setBookings(mappedBookings);
+
         } catch (e) {
             console.error("Ошибка загрузки данных админки:", e);
         } finally {
@@ -57,11 +65,21 @@ export default function Management() {
             formData.append('description', newCatData.description);
             formData.append('breed', newCatData.breed);
             formData.append('age', newCatData.age);
-            if (newCatData.tags?.length) formData.append('tags', newCatData.tags.join(','));
-            if (newCatData.image) formData.append('image', newCatData.image); // Файл или URL
 
+            if (newCatData.tags?.length) {
+                formData.append('tags', newCatData.tags.join(','));
+            }
+
+            // Добавляем ВСЕ файлы под одним ключом 'photos'
+            if (newCatData.photos && newCatData.photos.length > 0) {
+                newCatData.photos.forEach(file => {
+                    formData.append('photos', file);
+                });
+            }
+
+            // Форматируем медицинские данные кратно 4
             if (newCatData.medical && newCatData.medical.length > 0) {
-                const medString = newCatData.medical.map(m => `${m.iconName || 'syringe'},${m.label},${m.color},${m.bg}`).join(',');
+                const medString = newCatData.medical.map(m => `${m.iconName || 'stethoscope'},${m.label},${m.color},${m.bg}`).join(',');
                 formData.append('medical', medString);
             }
 
@@ -75,11 +93,12 @@ export default function Management() {
 
     const handleUpdateCat = async (updatedCatData) => {
         try {
+            // По спецификации PUT /cats/{id} принимает только tags и medical
             const dataToUpdate = {
                 tags: (updatedCatData.tags ||[]).join(','),
             };
             if (updatedCatData.medical && updatedCatData.medical.length > 0) {
-                dataToUpdate.medical = updatedCatData.medical.map(m => `${m.iconName || 'syringe'},${m.label},${m.color},${m.bg}`).join(',');
+                dataToUpdate.medical = updatedCatData.medical.map(m => `${m.iconName || 'stethoscope'},${m.label},${m.color},${m.bg}`).join(',');
             }
 
             await api.updateCat(updatedCatData.id, dataToUpdate);

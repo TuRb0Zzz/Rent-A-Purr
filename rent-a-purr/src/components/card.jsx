@@ -11,7 +11,11 @@ const ChevronLeft = ({ className, strokeWidth = 2 }) => (<svg className={classNa
 const Maximize2 = ({ className, strokeWidth = 2 }) => (<svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>);
 const Download = ({ className, strokeWidth = 2 }) => (<svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>);
 
-const timeSlots =["10:00", "12:00", "14:30", "16:00", "18:00", "19:30"];
+const timeSlots = [
+    "09:30", "10:15", "11:00", "11:45", "12:30",
+    "13:15", "14:00", "14:45", "15:30", "16:15",
+    "17:00", "17:45", "18:30", "19:15", "20:00"
+];
 
 export default function CatModal({ cat, onClose, onSubmitBooking }) {
     const [currentImg, setCurrentImg] = useState(0);

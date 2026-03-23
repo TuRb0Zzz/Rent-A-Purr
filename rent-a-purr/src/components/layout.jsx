@@ -8,13 +8,14 @@ import { api } from '../api';
 export default function Layout() {
     const [expanded, setExpanded] = useState(true);
     const [activeTab, setActiveTab] = useState('home');
-    const[showAccountMenu, setShowAccountMenu] = useState(false);
+    const [showAccountMenu, setShowAccountMenu] = useState(false);
 
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [user, setUser] = useState(null);
     const [showAuthModal, setShowAuthModal] = useState(false);
     const [authMode, setAuthMode] = useState('login');
-    const [authForm, setAuthForm] = useState({ username: '', password: '', nickname: '' });
+    // Добавлено поле phone
+    const [authForm, setAuthForm] = useState({ username: '', password: '', nickname: '', phone: '' });
     const [authError, setAuthError] = useState('');
     const [isLoading, setIsLoading] = useState(true);
 
@@ -34,16 +35,21 @@ export default function Layout() {
         setAuthError('');
         try {
             if (authMode === 'register') {
-                await api.register({ username: authForm.username, password: authForm.password, nickname: authForm.nickname });
+                // Добавлен phone в отправку
+                await api.register({
+                    username: authForm.username,
+                    password: authForm.password,
+                    nickname: authForm.nickname,
+                    phone: authForm.phone
+                });
             } else {
                 const profileRes = await api.login({ username: authForm.username, password: authForm.password });
                 setUser(profileRes.user);
             }
-            // const profileRes = await api.getProfile();
-            // setUser(profileRes.user);
             setIsAuthenticated(true);
             setShowAuthModal(false);
-            setAuthForm({ username: '', password: '', nickname: '' });
+            // Сброс формы теперь включает phone
+            setAuthForm({ username: '', password: '', nickname: '', phone: '' });
         } catch (err) {
             setAuthError(err.message);
         }
@@ -51,11 +57,10 @@ export default function Layout() {
 
     const handleLogout = async () => {
         try {
-            await api.logout(); // Говорим бекенду удалить сессию
+            await api.logout();
         } catch (e) {
             console.error("Ошибка при выходе:", e);
         }
-        // В любом случае очищаем состояние на фронтенде
         setIsAuthenticated(false);
         setUser(null);
         setShowAccountMenu(false);
@@ -65,14 +70,31 @@ export default function Layout() {
     const navItems =[
         { id: 'home', label: 'Главная', icon: 'home' },
         { id: 'catalog', label: 'Каталог', icon: 'pets' },
-        { id: 'management', label: 'Админка', icon: 'work' },
+        ...(user?.access_level === 1 ? [{ id: 'management', label: 'Менеджмент', icon: 'work' }] :[])
     ];
 
-    if (isLoading) return <div className="h-screen flex items-center justify-center bg-[#f3f4f6]">Загрузка...</div>;
+    if (isLoading) {
+        return (
+            <div className="flex h-screen items-center justify-center bg-[#FFE1E8] font-m3 overflow-hidden">
+                <div className="flex flex-col items-center gap-6 animate-in fade-in zoom-in duration-500">
+                    <div className="relative flex items-center justify-center w-32 h-32 bg-white rounded-full shadow-xl shadow-[#F6828C]/20 animate-bounce">
+                        <span className="material-symbols-rounded text-6xl text-[#F6828C]">pets</span>
+                    </div>
+                    <h1 className="font-seymour text-4xl sm:text-5xl text-[#F6828C] tracking-wide drop-shadow-sm">
+                        Rent'A'Purr
+                    </h1>
+                    <div className="flex gap-2">
+                        <div className="w-3 h-3 bg-[#F6828C] rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <div className="w-3 h-3 bg-[#F6828C] rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <div className="w-3 h-3 bg-[#F6828C] rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="flex h-screen bg-[#f3f4f6] font-m3 text-[#1D192B] overflow-hidden p-3 gap-3">
-            {/* Боковая панель (оставил как в прошлом сообщении) */}
             <nav className={`transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] flex flex-col py-4 relative z-20 ${expanded ? 'w-[280px]' : 'w-[72px]'}`}>
                 <div className={`flex items-center mb-6 transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] px-2 ${expanded ? 'justify-between' : 'justify-center'}`}>
                     <div className={`overflow-hidden transition-all duration-300 flex items-center ${expanded ? 'w-auto opacity-100 ml-3' : 'w-0 opacity-0'}`}>
@@ -149,7 +171,10 @@ export default function Layout() {
 
                         <form onSubmit={handleAuthSubmit} className="flex flex-col gap-4">
                             {authMode === 'register' && (
-                                <div className="flex flex-col"><label className="text-xs font-semibold text-[#49454F] mb-1 px-1">Никнейм</label><input type="text" required value={authForm.nickname} onChange={(e) => setAuthForm({...authForm, nickname: e.target.value})} className="bg-[#f3f4f6] rounded-t-lg border-b-2 border-[#CAC4D0] focus:border-[#F6828C] px-4 py-3 outline-none" placeholder="Ваше имя" /></div>
+                                <>
+                                    <div className="flex flex-col"><label className="text-xs font-semibold text-[#49454F] mb-1 px-1">Никнейм</label><input type="text" required value={authForm.nickname} onChange={(e) => setAuthForm({...authForm, nickname: e.target.value})} className="bg-[#f3f4f6] rounded-t-lg border-b-2 border-[#CAC4D0] focus:border-[#F6828C] px-4 py-3 outline-none" placeholder="Ваше имя" /></div>
+                                    <div className="flex flex-col"><label className="text-xs font-semibold text-[#49454F] mb-1 px-1">Телефон</label><input type="tel" required value={authForm.phone} onChange={(e) => setAuthForm({...authForm, phone: e.target.value})} className="bg-[#f3f4f6] rounded-t-lg border-b-2 border-[#CAC4D0] focus:border-[#F6828C] px-4 py-3 outline-none" placeholder="+7 (999) 000-00-00" /></div>
+                                </>
                             )}
                             <div className="flex flex-col"><label className="text-xs font-semibold text-[#49454F] mb-1 px-1">Логин (username)</label><input type="text" required value={authForm.username} onChange={(e) => setAuthForm({...authForm, username: e.target.value})} className="bg-[#f3f4f6] rounded-t-lg border-b-2 border-[#CAC4D0] focus:border-[#F6828C] px-4 py-3 outline-none" placeholder="user123" /></div>
                             <div className="flex flex-col"><label className="text-xs font-semibold text-[#49454F] mb-1 px-1">Пароль</label><input type="password" required value={authForm.password} onChange={(e) => setAuthForm({...authForm, password: e.target.value})} className="bg-[#f3f4f6] rounded-t-lg border-b-2 border-[#CAC4D0] focus:border-[#F6828C] px-4 py-3 outline-none" placeholder="••••••••" /></div>

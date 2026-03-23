@@ -178,6 +178,7 @@
 
 export const API_BASE_URL = 'https://vj6ftrfp-8000.euw.devtunnels.ms';
 
+// export const API_BASE_URL = 'http://localhost:8000';
 
 export const getImageUrl = (fileData) => {
     if (!fileData) return 'https://via.placeholder.com/600x400?text=Нет+фото';
