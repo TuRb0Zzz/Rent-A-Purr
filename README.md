@@ -14,4 +14,3 @@
 
 - Бэкенд — [@TuRb0Zzz](https://github.com/TuRb0Zzz)
 - Фронтенд — [@BaaBBaBaI](https://github.com/BaaBBaBaI)
-бебебебябябя
